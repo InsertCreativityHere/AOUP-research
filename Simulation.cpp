@@ -23,7 +23,7 @@ std::vector<double> generateUniform(unsigned long size, double min, double max)
     std::vector<double> population(size);
     std::uniform_real_distribution<double> distribution(min, max);
 
-    for(auto &pop : population)
+    for(auto& pop : population)
     {
         pop = distribution(generator);
     }
@@ -42,7 +42,7 @@ std::vector<double> generateNormal(unsigned long size, double mean, double stdde
     std::vector<double> population(size);
     std::normal_distribution<double> distribution(mean, stddev);
 
-    for(auto &pop : population)
+    for(auto& pop : population)
     {
         pop = distribution(generator);
     }
@@ -70,7 +70,7 @@ void runSimulation(Force& force, Histogram* posHisto, Histogram* forceHisto, His
     std::vector<double> noise;
 
     const auto totalSteps = (unsigned long)(duration / timestep);
-    for(auto currentStep = 0; currentStep < totaSteps; currentStep++);
+    for(auto currentStep = 0; currentStep < totalSteps; currentStep++);
     {
         noise =  generateNormal(particleCount, 0, 1);
 
@@ -102,7 +102,6 @@ void runSimulation(Force& force, Histogram* posHisto, Histogram* forceHisto, His
 //TODO
 int main(int argc, char[]* argv)
 {
-
     std::vector<double> coefficients = COEFFICIENTS;
     force::PolyForce polyForce(coefficients);
 

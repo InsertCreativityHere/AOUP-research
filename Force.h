@@ -1,10 +1,8 @@
+
 #ifndef FORCE_DEF
 #define FORCE_DEF
 
 #include <vector>
-
-#define POS_TYPE double
-#define FORCE_TYPE double
 
 namespace force
 {
@@ -12,7 +10,7 @@ namespace force
     {
         public:
             virtual FORCE_TYPE getForce(POS_TYPE position) = 0;
-            std::vector<FORCE_TYPE> getForceForAll(const std::vector<POS_TYPE> &positions);
+            std::vector<FORCE_TYPE> getForceForAll(const std::vector<POS_TYPE>& positions);
     };
 
     class LinearForce : public Force

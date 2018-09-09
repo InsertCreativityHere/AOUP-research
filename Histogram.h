@@ -1,12 +1,8 @@
+
 #ifndef HISTOGRAM_DEF
 #define HISTOGRAM_DEF
 
 #include <vector>
-
-#define BINH_TYPE unsigned long
-#define BINW_TYPE unsigned short
-#define DATA_TYPE double
-#define DATA_LENGTH unsigned long
 
 namespace histogram
 {
@@ -14,8 +10,8 @@ namespace histogram
     {
         public:
             Histogram(BINW_TYPE bins, double minimum, double maximum);
-            virtual std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE> &data) = 0;
-            virtual std::vector<DATA_TYPE> getBins();
+            virtual std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE>& data) = 0;
+            virtual std::vector<DATA_TYPE> getBins() = 0;
 
         protected:
             BINW_TYPE binCount;
@@ -27,7 +23,7 @@ namespace histogram
     {
         public:
             LinearHistogram(BINW_TYPE bins, double minimum, double maximum);
-            std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE> &data);
+            std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE>& data);
             std::vector<DATA_TYPE> getBins();
 
         private:
@@ -38,7 +34,7 @@ namespace histogram
     {
         public:
             CustomHistogram(std::vector<DATA_TYPE> bins, double minimum, double maximum);
-            std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE> &data);
+            std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE>& data);
             std::vector<DATA_TYPE> getBins();
 
         private:
