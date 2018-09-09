@@ -67,7 +67,7 @@ std::vector<std::string> parseCommaDelimitedString(const std::string& str)
     while(stringStream.good())
     {
         std::string subString;
-        std::getLine(stringStream, subString, ',');
+        std::getline(stringStream, subString, ',');
         result.push_back(subString);
     }
 
@@ -75,27 +75,34 @@ std::vector<std::string> parseCommaDelimitedString(const std::string& str)
 }
 
 /**
- * 
+ * TODO
  **/
-histogram::Recorder createRecorder(const std::string& type, const std::string& parameters)
+histogram::Recorder* createRecorder(const std::string& type, const std::string& parameters)
 {
     std::vector<std::string> paramVector = parseCommaDelimitedString(parameters);
     if(type == "linear")
     {
-        return Histogram::Recorder(histogram::LinearHistogram(std::stoul(paramVector[0]), std::stod(paramVector[1]), std::stod(paramVector[2])));
+        auto histo = histogram::LinearHistogram(std::stoul(paramVector[0]), std::stod(paramVector[1]), std::stod(paramVector[2]));
+        return new histogram::Recorder(histo);
     } else
     if(type == "custom")
     {
-        return histogram::Recorder(histogram::CustomHistogram(paramVector));
+        std::vector<double> bins;
+        for(const auto& p :paramVector)
+        {
+            bins.push_back(std::stod(p));
+        }
+        auto histo = histogram::CustomHistogram(bins);
+        return new histogram::Recorder(histo);
     }
 }
 
 /**
  * Runs the actual simulation.
  * @param force The external force to impose on the particles.
- * @param posHisto Histogram for logging the particle's positions over time. NULL indicates it shouldn't be tracked.
- * @param forceHisto Histogram for logging the particle's active forces over time. NULL indicates it shouldn't be tracked.
- * @param noiseHisto Histogram for loggint the random noise applied to the system over time. NULL indicates it shouldn't be tracked.
+ * @param posRecorder Recorder for logging the particle's positions over time. NULL indicates it shouldn't be tracked.
+ * @param forceRecorder Recorder for logging the particle's active forces over time. NULL indicates it shouldn't be tracked.
+ * @param noiseRecorder Recorder for loggint the random noise applied to the system over time. NULL indicates it shouldn't be tracked.
  * @param particleCount The number of particles to simulate.
  * @param duration The length of the simulation in seconds.
  * @param timestep The amount of time to let pass between updating the simulation.
@@ -103,43 +110,43 @@ histogram::Recorder createRecorder(const std::string& type, const std::string& p
  * @param memory //TODO
  * @param dataDelay The number of timesteps to wait before logging data.
  **/
-void runSimulation(force::Force& force, histogram::Recorder* posHisto, histogram::Recorder* forceHisto, histogram::Recorder* noiseHisto, const unsigned long particleCount, const double duration, const double timestep, const double diffusion, const double memory, const unsigned long dataDelay)
+void runSimulation(force::Force& force, histogram::Recorder* posRecorder, histogram::Recorder* forceRecorder, histogram::Recorder* noiseRecorder, const unsigned long particleCount, const double duration, const double timestep, const double diffusion, const double memory, const unsigned long dataDelay)
 {
     std::vector<double> positions = generateUniform(particleCount, -5, 5);//TODO
     std::vector<double> activeForces = generateNormal(particleCount, 0, 0.2);//TODO
     std::vector<double> noise;
 
     const auto totalSteps = (unsigned long)(duration / timestep);
-    for(auto currentStep = 0; currentStep < totalSteps; currentStep++);
+    for(auto currentStep = 0; currentStep < totalSteps; currentStep++)
     {
         noise =  generateNormal(particleCount, 0, 1);
 
         for(auto i = 0; i < particleCount; i++)
         {
-            positions[i] += (activeForces[i] + polyForce.getForce(positions[i])) * timestep;
+            positions[i] += (activeForces[i] + force.getForce(positions[i])) * timestep;
             activeForces[i] += (-(activeForces[i] * timestep) + (sqrt(2 * diffusion * timestep)) * noise[i]) / memory;
         }
 
         if(currentStep % dataDelay == 0)
         {
             auto currentTime = (currentStep * timestep);
-            if(posHisto)
+            if(posRecorder)
             {
                 posRecorder->recordData(currentTime, positions);
             }
-            if(forceHisto)
+            if(forceRecorder)
             {
-                posRecorder->recordData(currentTime, activeForces);
+                forceRecorder->recordData(currentTime, activeForces);
             }
-            if(noiseHisto)
+            if(noiseRecorder)
             {
-                posRecorder->recordData(currentTime, noise);
+                noiseRecorder->recordData(currentTime, noise);
             }
         }
     }
 }
 
-//TODO
+//TODO just fixing this up somehow, oh and also have it convert all the strings into lowercase!
 //first parameter is always output filename
 //-f <force_type> <force_parameters>
 //-m <memory amount>
@@ -151,9 +158,10 @@ void runSimulation(force::Force& force, histogram::Recorder* posHisto, histogram
 //-pr <histo_type> <histo_parameters>
 //-fr <histo_type> <histo_parameters>
 //-nr <histo_type> <histo_parameters>
-int main(int argc, char[]* argv)
+int main(int argc, char* argv[])
 {
     std::string outputFile = argv[1];
+    
     //Load default values for simulation parameters
     force::Force* force = NULL;
     histogram::Recorder* posRecorder = NULL;
@@ -174,18 +182,18 @@ int main(int argc, char[]* argv)
             if(argv[i+1] == "poly")
             {
                 std::vector<std::string> parameters = parseCommaDelimitedString(argv[i+2]);
-                std::vector<std::double> coeffecients;
+                std::vector<double> coeffecients;
                 for(const auto& p : parameters)
                 {
                     coeffecients.push_back(std::stod(p));
                 }
 
-                force = &force::PolyForce(coeffecients);
+                force = new force::PolyForce(coeffecients);
             } else
             if(argv[i+1] == "linear")
             {
                 std::vector<std::string> parameters = parseCommaDelimitedString(argv[i+2]);
-                force = &force::LinearForce(std::stod(parameters[0]), std::stod(parameters[1]));
+                force = new force::LinearForce(std::stod(parameters[0]), std::stod(parameters[1]));
             } else{
                 //TODO unknown parameter
                 return 1;
@@ -193,15 +201,15 @@ int main(int argc, char[]* argv)
         } else
         if(argv[i] == "-pr")
         {
-            posRecorder = &createRecorder(argv[i+1], argv[i+2]);
+            posRecorder = createRecorder(argv[i+1], argv[i+2]);
         } else
         if(argv[i] == "-fr")
         {
-            forceRecorder = &createRecorder(argv[i+1], argv[i+2]);
+            forceRecorder = createRecorder(argv[i+1], argv[i+2]);
         } else
         if(argv[i] == "-nr")
         {
-            noiseRecorder = &createRecorder(argv[i+1], argv[i+2]);
+            noiseRecorder = createRecorder(argv[i+1], argv[i+2]);
         } else
         if(argv[i] == "-p")
         {
@@ -213,7 +221,7 @@ int main(int argc, char[]* argv)
         } else
         if(argv[i] == "-dt")
         {
-            timeStep = std::stod(argv[++i]);;
+            timestep = std::stod(argv[++i]);;
         } else
         if(argv[i] == "-d")
         {
@@ -238,18 +246,18 @@ int main(int argc, char[]* argv)
         return 1;
     }
 
-    runSimulation(force, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay);
+    runSimulation(*force, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay);
 
     if(posRecorder)
     {
-        posRecorder.writeData(outputFile + ".pos");
+        posRecorder->writeData(outputFile + ".pos");
     }
     if(forceRecorder)
     {
-        forceRecorder.writeData(outputFile + ".force");
+        forceRecorder->writeData(outputFile + ".force");
     }
     if(noiseRecorder)
     {
-        noiseRecorder.writeData(outputFile + ".noise");
+        noiseRecorder->writeData(outputFile + ".noise");
     }
 }
