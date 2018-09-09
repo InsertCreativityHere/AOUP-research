@@ -33,7 +33,7 @@ namespace histogram
     class CustomHistogram : public Histogram
     {
         public:
-            CustomHistogram(std::vector<double> bins, double minimum, double maximum);
+            CustomHistogram(std::vector<double> bins);
             std::vector<unsigned long> sort(const std::vector<double>& data);
             std::vector<double> getBins();
 

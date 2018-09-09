@@ -46,8 +46,8 @@ namespace histogram
         return bins;
     }
 
-    CustomHistogram::CustomHistogram(std::vector<double> bins, double minimum, double maximum):
-    Histogram(bins.size(), minimum, maximum), binBounds(bins)
+    CustomHistogram::CustomHistogram(std::vector<double> bins):
+    Histogram(bins.size(), binBounds.front(), binBounds.back()), binBounds(bins)
     {
     }
 
@@ -57,11 +57,11 @@ namespace histogram
 
         for(const auto& point : data)
         {
-            if(point < binBounds.front())
+            if(point < min)
             {
                 bins.front()++;
             } else
-            if(point > binBounds.back())
+            if(point > max)
             {
                 bins.back()++;
             } else{
