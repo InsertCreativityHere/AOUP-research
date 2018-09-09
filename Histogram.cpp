@@ -3,19 +3,19 @@
 
 namespace histogram
 {
-    Histogram::Histogram(BINW_TYPE bins, double minimum, double maximum):
+    Histogram::Histogram(unsigned long bins, double minimum, double maximum):
     binCount(bins + 2), min(minimum), max(maximum)
     {
     }
 
-    LinearHistogram::LinearHistogram(BINW_TYPE bins, double minimum, double maximum):
+    LinearHistogram::LinearHistogram(unsigned long bins, double minimum, double maximum):
     Histogram(bins, minimum, maximum), width((maximum - minimum) / bins)
     {
     }
 
-    std::vector<BINH_TYPE> LinearHistogram::sort(const std::vector<DATA_TYPE>& data)
+    std::vector<unsigned long> LinearHistogram::sort(const std::vector<double>& data)
     {
-        std::vector<BINH_TYPE> bins(binCount);
+        std::vector<unsigned long> bins(binCount);
 
         for(const auto& point : data)
         {
@@ -27,17 +27,17 @@ namespace histogram
             {
                 bins.back()++;
             } else{
-                bins[(BINW_TYPE)((point - min) / width) + 1]++;
+                bins[(unsigned long)((point - min) / width) + 1]++;
             }
         }
 
         return bins;
     }
 
-    std::vector<DATA_TYPE> LinearHistogram::getBins()
+    std::vector<double> LinearHistogram::getBins()
     {
-        std::vector<DATA_TYPE> bins(binCount - 1);
-        for(BINW_TYPE i = 0; i < (binCount - 2); i++)
+        std::vector<double> bins(binCount - 1);
+        for(unsigned long i = 0; i < (binCount - 2); i++)
         {
             bins[i] = min + (width * i);
         }
@@ -46,14 +46,14 @@ namespace histogram
         return bins;
     }
 
-    CustomHistogram::CustomHistogram(std::vector<DATA_TYPE> bins, double minimum, double maximum):
+    CustomHistogram::CustomHistogram(std::vector<double> bins, double minimum, double maximum):
     Histogram(bins.size(), minimum, maximum), binBounds(bins)
     {
     }
 
-    std::vector<BINH_TYPE> CustomHistogram::sort(const std::vector<DATA_TYPE>& data)
+    std::vector<unsigned long> CustomHistogram::sort(const std::vector<double>& data)
     {
-        std::vector<BINH_TYPE> bins(binCount);
+        std::vector<unsigned long> bins(binCount);
 
         for(const auto& point : data)
         {
@@ -65,7 +65,7 @@ namespace histogram
             {
                 bins.back()++;
             } else{
-                for(BINW_TYPE j = 1; j < binBounds.size(); j++)
+                for(auto j = 1; j < binBounds.size(); j++)
                 {
                     if(point < bins[j])
                     {
@@ -79,7 +79,7 @@ namespace histogram
         return bins;
     }
 
-    std::vector<DATA_TYPE> CustomHistogram::getBins()
+    std::vector<double> CustomHistogram::getBins()
     {
         return binBounds;
     }

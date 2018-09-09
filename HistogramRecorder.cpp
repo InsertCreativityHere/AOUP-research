@@ -9,7 +9,7 @@ namespace histogram
     {
     }
 
-    void Recorder::recordData(TIME_TYPE time, const std::vector<DATA_TYPE>& data)
+    void Recorder::recordData(double time, const std::vector<double>& data)
     {
         recording.push_back(histogram.sort(data));
         times.push_back(time);

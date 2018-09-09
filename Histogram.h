@@ -9,12 +9,12 @@ namespace histogram
     class Histogram
     {
         public:
-            Histogram(BINW_TYPE bins, double minimum, double maximum);
-            virtual std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE>& data) = 0;
-            virtual std::vector<DATA_TYPE> getBins() = 0;
+            Histogram(unsigned long bins, double minimum, double maximum);
+            virtual std::vector<unsigned long> sort(const std::vector<double>& data) = 0;
+            virtual std::vector<double> getBins() = 0;
 
         protected:
-            BINW_TYPE binCount;
+            unsigned long binCount;
             double min;
             double max;
     };
@@ -22,9 +22,9 @@ namespace histogram
     class LinearHistogram : public Histogram
     {
         public:
-            LinearHistogram(BINW_TYPE bins, double minimum, double maximum);
-            std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE>& data);
-            std::vector<DATA_TYPE> getBins();
+            LinearHistogram(unsigned long bins, double minimum, double maximum);
+            std::vector<unsigned long> sort(const std::vector<double>& data);
+            std::vector<double> getBins();
 
         private:
             double width;
@@ -33,12 +33,12 @@ namespace histogram
     class CustomHistogram : public Histogram
     {
         public:
-            CustomHistogram(std::vector<DATA_TYPE> bins, double minimum, double maximum);
-            std::vector<BINH_TYPE> sort(const std::vector<DATA_TYPE>& data);
-            std::vector<DATA_TYPE> getBins();
+            CustomHistogram(std::vector<double> bins, double minimum, double maximum);
+            std::vector<unsigned long> sort(const std::vector<double>& data);
+            std::vector<double> getBins();
 
         private:
-            std::vector<DATA_TYPE> binBounds;
+            std::vector<double> binBounds;
     };
 }
 #endif

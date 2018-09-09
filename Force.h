@@ -9,29 +9,29 @@ namespace force
     class Force
     {
         public:
-            virtual FORCE_TYPE getForce(POS_TYPE position) = 0;
-            std::vector<FORCE_TYPE> getForceForAll(const std::vector<POS_TYPE>& positions);
+            virtual double getForce(double position) = 0;
+            std::vector<double> getForceForAll(const std::vector<double>& positions);
     };
 
     class LinearForce : public Force
     {
         public:
-            LinearForce(FORCE_TYPE center, FORCE_TYPE slope);
-            FORCE_TYPE getForce(POS_TYPE position);
+            LinearForce(double center, double slope);
+            double getForce(double position);
 
         private:
-            const FORCE_TYPE center;
-            const FORCE_TYPE intensity;
+            const double center;
+            const double intensity;
     };
 
     class PolyForce : public Force
     {
         public:
-            PolyForce(std::vector<FORCE_TYPE> coefficients);
-            FORCE_TYPE getForce(POS_TYPE position);
+            PolyForce(std::vector<double> coefficients);
+            double getForce(double position);
 
         private:
-            const std::vector<FORCE_TYPE> coefficients;
+            const std::vector<double> coefficients;
     };
 }
 #endif

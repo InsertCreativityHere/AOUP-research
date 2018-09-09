@@ -12,14 +12,14 @@ namespace histogram
     {
         public:
             Recorder(Histogram& histogram);
-            void recordData(TIME_TYPE time, const std::vector<DATA_TYPE>& data);
+            void recordData(double time, const std::vector<double>& data);
             void writeData(const std::string& outputFile);
             void clearData();
 
         private:
             Histogram& histogram;
-            std::vector<std::vector<BINH_TYPE>> recording;
-            std::vector<TIME_TYPE> times;
+            std::vector<std::vector<unsigned long>> recording;
+            std::vector<double> times;
     };
 }
 #endif
