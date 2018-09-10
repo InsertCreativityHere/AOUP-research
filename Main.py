@@ -82,10 +82,7 @@ import matplotlib.pyplot as plt
 import copy;
 
 class FilyDensityCode:
-    def __init__(self, coefficients, tau, diffusion=1):
-        self.tau = tau;
-        self.diffusion = diffusion;
-
+    def __init__(self, coefficients):
         coefficients = list(coefficients);
         for counter in range(len(coefficients)):
             coefficients[counter] *= counter;
@@ -98,7 +95,7 @@ class FilyDensityCode:
         d2uTemp = copy.deepcopy(coefficients);
         self.d2U_ = lambda x: polyFunction(d2uTemp, x);
 
-    def generateProfile(self, xMin, xMax, sampleCount):
+    def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
         X = sp.linspace(xMin, xMax, sampleCount);
         # Find the extrema of dU, which are also the jump take offs.
         dU  = self.dU_(X)
@@ -129,15 +126,15 @@ class FilyDensityCode:
         # First build the corresponding matrix and column vector.
         A  = sp.zeros((2*Nc,2*Nc-2))
         B  = sp.zeros((2*Nc))
-        self.E  = lambda v,v0=sp.sqrt(2*self.diffusion/self.tau): self.tau**2/self.diffusion*v0*erfi(v/v0);
+        E  = lambda v,v0=sp.sqrt(2*diffusion/tau): tau**2/diffusion*v0*erfi(v/v0);
         for k,(i1,j1,i2,j2,s) in enumerate(jumps):
             # Zero total flux over each region.
             A[j1,k] = -1
             A[j2,k] =  1
             # q=0 at the right end of each region except
-            # q=sqrt(self.tau/2*pi*self.diffusion for the last region.
-            A[Nc+j1,k] =  self.E(dU[IIc[j1,1]]) - self.E(dU[i1]);
-            A[Nc+j2,k] = -self.E(dU[IIc[j2,1]]) + self.E(dU[i2]);
+            # q=sqrt(tau/2*pi*diffusion for the last region.
+            A[Nc+j1,k] =  E(dU[IIc[j1,1]]) - E(dU[i1]);
+            A[Nc+j2,k] = -E(dU[IIc[j2,1]]) + E(dU[i2]);
         B[Nc]     = -1
         B[2*Nc-1] = 1
         A = sp.delete(A,[Nc-1,2*Nc-1],0)
@@ -150,31 +147,29 @@ class FilyDensityCode:
             jumps_per_region[j1].append([i1,k,-1]) # outgoing jump in region j1
             jumps_per_region[j2].append([i2,k, 1]) # incoming jump in region j2
         jumps_per_region = [ sorted(jpr) for jpr in jumps_per_region ]
-        q0 = sp.sqrt(self.tau/(2*sp.pi*self.diffusion))
-        self.bins = [-sp.inf];
-        self.vals = [[0,1]];
+        q0 = sp.sqrt(tau/(2*sp.pi*diffusion))
+        bins = [-sp.inf];
+        vals = [[0,1]];
         for j,jpr in enumerate(jumps_per_region):
             # Iterate over the subregions of the convex region.
             a,b = 0,1 if j==0 else 0
             for i,k,s in jpr:
-                self.bins.append(X[i]);
+                bins.append(X[i]);
                 a -= s*J[k]
-                b += s*J[k]*self.E(dU[i])
-                self.vals.append([a,b]);
+                b += s*J[k]*E(dU[i])
+                vals.append([a,b]);
             # If things go well the last value pair of the region is [0,0]
             # and describe the density in the following concave region.
             b0 = 1 if j==Nc-1 else 0
-            if sp.absolute(self.vals[-1][0])>1e-4 or sp.absolute(self.vals[-1][1]-b0)>1e-4:
-                print(str(self.tau) + ":\tThere are numerical precision issues.");
-        self.bins.append(sp.inf);
-        self.bins = sp.array(self.bins);
-        self.vals = sp.array(self.vals);
+            if sp.absolute(vals[-1][0])>1e-4 or sp.absolute(vals[-1][1]-b0)>1e-4:
+                print(str(index) + ":\tThere are numerical precision issues.");
+        bins.append(sp.inf);
 
-    def p(self, x):
-        j   = sp.digitize(x,self.bins)-1
-        a,b = self.vals[j].T
-        q = a*self.E(self.dU_(x))+b
-        return self.d2U_(x)*q*sp.exp(-self.tau*self.dU_(x)**2/(2*self.diffusion));
+        return lambda x: self.p(x, tau, diffusion, E, sp.array(bins), sp.array(vals))
+
+    def p(self, x, tau, diffusion, E, bins, vals):
+        a,b = vals[sp.digitize(x,bins)-1].T
+        return self.d2U_(x)*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
 
 def viewHistogram(dataFile):
     histogram = Histogram(dataFile);
@@ -183,57 +178,46 @@ def viewHistogram(dataFile):
     plt.show();
     plt.close();
 
-def PolySimA(coefficients, tau=1, diffusion=1, dt=0.001, particles=50000, duration=30, dataDelay=500, binCount=200, binMinP=-10, binMaxP=10, binMinF=-1, binMaxF=1, index=""):
-    compileCommand = "g++"
-    coefficientString = "";
-    for counter in range(len(coefficients) - 1):
-        coefficientString += str(coefficients[counter + 1] * -(counter + 1)) + ',';
-    compileCommand += " -D COEFFICIENTS=\{" + coefficientString[:-1] + "\}";
-    compileCommand += " -D TAU=" + str(tau);
-    compileCommand += " -D DIFFUSION=" + str(diffusion);
-    compileCommand += " -D TIMESTEP=" + str(dt);
-    compileCommand += " -D PARTICLES=" + str(particles);
-    compileCommand += " -D DURATION=" + str(duration);
-    compileCommand += " -D DATADELAY=" + str(dataDelay);
-    compileCommand += " -D BINCOUNT=" + str(binCount);
-    compileCommand += " -D BINMINP=" + str(binMinP);
-    compileCommand += " -D BINMAXP=" + str(binMaxP);
-    compileCommand += " -D BINMINF=" + str(binMinF);
-    compileCommand += " -D BINMAXF=" + str(binMaxF);
-    compileCommand += " -o simulate" + index;
-    compileCommand += " Simulation.cpp Force.cpp Histogram.cpp HistogramRecorder.cpp";
-    print(str(tau) + ":\tCompiling...");
-    compileReturn = sproc.call(compileCommand.split());
-    if(compileReturn != 0):
-        raise RuntimeError(str(tau) + ":\tFailed to compile! Process returned: " + str(compileReturn));
+def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=50000, duration=60, timestep=0.05, diffusion=1, tau=1, dataDelay=20):
+    print(str(index) + ":\t Starting...";
+    #Create the command for running the simulation.
+    command = "./simulate " + str(outputPath) + " -f " + str(force);
+    if(posRecorder):
+        command += " -pr " + str(posRecorder);
+    if(forceRecorder):
+        command += " -fr " + str(forceRecorder);
+    if(noiseRecorder):
+        command += " -nr " + str(noiseRecorder);
+    command += " -p " + str(particleCount) + " -t " + str(duration) + " -dt "+ str(timestep) + " -d " + str(diffusion) + " -m " + str(tau) + " -dd " + str(dataDelay);
 
-    runCommand = "./simulate" + index;
-    print(str(tau) + ":\tRunning Simulation...");
-    runReturn = sproc.call(runCommand.split());
-    if(runReturn != 0):
+    #Run the simulation.
+    print(str(index) + ":\tRunning Simulation...");
+    if(sproc.call(command.split()) != 0):
         raise RuntimeError(str(tau) + ":\tFailed to run! Process returned: " + str(runReturn));
-    print(str(tau) + ":\tFinished Simulating.")
 
-def polySimB(coefficients, tau=1, diffusion=1, particles=50000, binCount=200, binMinP=-10, binMaxP=10):
-    try:
-        print(str(tau) + ":\tGenerating Predicted Density Profile...");
-        filysPrediction = FilyDensityCode(coefficients, tau, diffusion);
-        filysPrediction.generateProfile(binMinP, binMaxP, (binCount * 100));
-    except Exception as e:
-        filysPrediction = None;
-        print(e);
+    print(str(index) + ":\tExporting results...");
+    if(posRecorder):
+        print(str(index) + ":\tGenerating prediction...");
+        prediction = predicter.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), tau, diffusion);
+        positionXY = Histogram(str(outputPath) + ".pos").interpolate();
+        ax = plt.gca();
+		X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 10);
+		ax.plot(X, force(X), 'g');
+		ax = ax.twinx();
+		ax.plot(X, prediction(X), 'b');
+		ax.plot(positionXY[0], positionXY[1], 'r');
+		plt.savefig(str(outputPath) + ".png",fmt='png',dpi=1000);
+		plt.close();
+    if(forceRecorder):
+        forceXY = Histogram(str(outputPath) + ".force").interpolate();
+        #TODO
+    if(noiseRecorder):
+        noiseXY = Histogram(str(outputPath) + ".noise").interpolate();
+        #TODO
 
-    print(str(tau) + ":\tExporting Results...");
-    positionXY = Histogram("T=" + str(tau) + ".pos").interpolate();
-    ax = plt.gca();
-    X = sp.linspace(binMinP, binMaxP,binCount * 10);
-    ax.plot(X, polyFunction(coefficients, X), 'g');
-    ax = ax.twinx();
-    if(filysPrediction != None):
-        ax.plot(X, filysPrediction.p(X), 'b');
-    ax.plot(positionXY[0], positionXY[1], 'r');
-    plt.savefig("T=" + str(tau) + ".png",fmt='png',dpi=1000);
-    plt.close();
+#need this in the recorders binMin, binMax, binCount!!
+#and also other stuff for the force too.
+#def polySimB(coefficients, tau=1, diffusion=1, particles=50000, binCount=200, binMinP=-10, binMaxP=10):#, binMinF=-1, binMaxF=1
 
 def runPolySim(coefficients, tau=1, diffusion=1, dt=0.005, particles=20000, duration=30, dataDelay=200, binCount=500, binMinP=-10, binMaxP=10, binMinF=-1, binMaxF=1, parallel=True):
     try:
@@ -253,3 +237,8 @@ def runPolySim(coefficients, tau=1, diffusion=1, dt=0.005, particles=20000, dura
         PolySimA(coefficients, tau, diffusion, dt, particles, duration, dataDelay, binCount, binMinP, binMaxP, binMinF, binMaxF);
         polySimB(coefficients, tau, diffusion, particles, binCount, binMinP, binMaxP);
     print("Finished!");
+
+
+
+
+
