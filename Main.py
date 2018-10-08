@@ -7,6 +7,10 @@ import numpy as np;
 import subprocess as sproc;
 import threading;
 
+#==================================================================================================================
+# Fily's code for generating prediction curves. Initialize it with the coeffecients of the potential polynomial,
+# Then generate predictions for specific scenarios by calling 'generateProfile'.
+
 import scipy as sp
 #from scipy.optimize import brentq
 from scipy.special import erfi
@@ -22,12 +26,12 @@ class FilyDensityCode:
             coefficients[counter] *= counter;
         coefficients = coefficients[1:];
         duTemp = copy.deepcopy(coefficients);
-        self.dU_ = lambda x: polyFunction(duTemp, x);
+        self.dU_ = polyFunc(duTemp);
         for counter in range(len(coefficients)):
             coefficients[counter] *= counter;
         coefficients = coefficients[1:];
         d2uTemp = copy.deepcopy(coefficients);
-        self.d2U_ = lambda x: polyFunction(d2uTemp, x);
+        self.d2U_ = polyFunc(d2uTemp);
 
     def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
         X = sp.linspace(xMin, xMax, sampleCount);
@@ -105,6 +109,9 @@ class FilyDensityCode:
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
 
+#==================================================================================================================
+# Utilities for recording and visualing collected data
+
 class Histogram:
     def __init__(self, filePath):
         with open(filePath) as file:
@@ -172,11 +179,279 @@ def viewHistogram(dataFile):
     plt.show();
     plt.close();
 
-def polyFunction(coefficients, x):
-    value = 0;
-    for counter in range(len(coefficients)):
-        value += coefficients[counter] * (x**counter);
-    return value;
+#==================================================================================================================
+# Utilities for creating functions.
+
+'''
+Class encapsulating a polynomial, it's intialized with coeffecients in ascending order (lowest order coeffecient
+to highest order), then can be called like any normal function.
+'''
+class PolyFunc:
+    def __init__(self, coeffecients):
+        self.c = np.array(coeffecients);
+        self.derivative = None;
+        self.integral = None;
+
+    def __len__(self):
+        return len(self.c);
+
+    def __repr__(self):
+        return "y = TODO";
+
+    def __call__(self, x):
+        return np.dot(self.c, np.power(x, np.arange(len(self))));
+
+    def deriv(self):
+        if(self.derivative == None):
+            self.derivative = PolyFunc(np.multiply(self.c, np.arange(len(self)))[1:]);
+        return self.derivative;
+
+    def integ(self, C):
+        if(self.integral == None):
+            self.integral = PolyFunc(np.array([C]).append(np.multiply(self.c, np.reciprocal(np.arange(len.self) + 1))));
+        return self.integral;
+
+'''
+Class encapsulating a piecewise function, it's intialized with functions, and the boundary points between them.
+After initialization it can be called like any normal function.
+Functions must be passed in left to right, as must the bounds. There is also an additional field to specify
+the direction to evaulate the piecewise function from at the boundaries. False indicates to evaulate it from the
+left, True to evaulate it from the right. If left unused, by default boundaries are always evaulated from the
+left.
+'''
+class PieceFunc:
+    def __init__(self, functions, bounds, directions=None):
+        if(len(functions) != (len(bounds) + 1)):
+            raise ValueError("There must be exactly 1 less bound than there are functions.");
+        for i in range(1, len(bounds)):
+            if(bounds[i] <= bounds[i-1]):
+                raise ValueError("Bounds must be in increasing order, and no bounds can be the same.");
+        self.functions = functions;
+        self.bounds = bounds;
+
+    def __len__(self):
+        return len(self.functions);
+
+    def __getitem__(self, index):
+        return self.functions[index];
+
+    def __repr__(self):
+        return "y = TODO";
+
+    def __call__(self, x):
+        for i in range(len(self.bounds)):
+            if(x <= self.bounds[i]):
+                if((x == self.bounds[i]) and (directions != None) and (directions[i])):
+                    i += 1;
+                break;
+        else:
+            i += 1;
+        return self.functions[i](x);
+
+'''
+Class encapsulating a double well potential. At initialization the relevant properties of the well
+are specified, and afterwards it's callable as any normal function.
+TODO This is not the most stable, we added some warnings to alert us about instabilities being
+present, but there might be more that we haven't found, and at the least, the warnings don't
+give the most accurate numbers, because there's ALOT of really complicated feedback loops in
+creating this thing...
+'''
+class DoubleWellFunc:
+    def __init__(self, points, fa, f1b, fc, f2c, f1d, fe):
+        self.stable = true;
+        bc = createSpline12200(points[2], points[1], fc, 0, f1b, f2c, 0);
+        cd = createSpline12200(points[2], points[3], fc, 0, f1d, f2c, 0);
+        ab = createSpline22100(points[1], points[0], bc(points[1]), fa, f1b, 0, 0);
+        de = createSpline22100(points[3], points[4], cd(points[3]), fe, f1d, 0, 0);
+
+        ab1 = ab.deriv();
+        ab2 = ab1.deriv();
+        ab3 = ab2.deriv();
+        ab4 = ab3.deriv();
+        aa = createSpline11111(points[0], ab(points[0]), ab1(points[0]), ab2(points[0]), ab3(points[0]), ab4(points[0]));
+
+        de1 = de.deriv();
+        de2 = de1.deriv();
+        de3 = de2.deriv();
+        de4 = de3.deriv();
+        ee = createSpline11111(points[4], de(points[4]), de1(points[4]), de2(points[4]), de3(points[4]), de4(points[4]));
+
+        if(f1b <= 0):
+            print("WARNING: Having non-positive slope at b causes instability");
+            self.stable = false;
+        if(f1d >= 0):
+            print("WARNING: Having non-negative slope at d causes instability");
+            self.stable = false;
+
+        slopeBAmax = 1.5 * (bc(points[1]) - fa) / (points[1] - points[0]);
+        slopeDEmin = 1.5 * (cd(points[3]) - fe) / (points[3] - points[4]);
+        if(f1b >= slopeBAmax):
+            print("WARNING: Having derivative more than 1.5*slope{BA} at b causes instability. max=" + str(slopeBAmax));
+            self.stable = false;
+        if(f1b <= slopeDEmin):
+            print("WARNING: Having derivative less than 1.5*slope{DE} at d causes instability. min=" + str(slopeDEmin));
+            self.stable = false;
+
+        concavityCBmax = -2 * f1b / (points[2] - points[1]);
+        concavityCDmax = -2 * f1d / (points[2] - points[3]);
+        if(f2c >= concavityCBmax):
+            print("WARNING: Having 2nd derivative more than -2*concavity{CB} at c causes instability. max=" + str(concavityCBmax));
+            self.stable = false;
+        if(f2c >= concavityCDmax):
+            print("WARNING: Having 2nd derivative more than -2*concavity{CD} at c causes instability. max=" + str(concavityCDmax));
+            self.stable = false;
+
+        self.function = PieceFunc([aa,ab, bc, cd, de,ee], points);
+
+    def __call__(self, x):
+        return self.function(x);
+
+'''
+Creates a quartic polynomial function with with a specified value, 1st, 2nd, 3rd,
+and 4th derivative at a point
+@param a The point to specify all it's properties at.
+@param fa The value of the function at a.
+@param f1a The value of the function's 1st derivative at a.
+@param f2a The value of the function's 2nd derivative at a.
+@param f3a The value of the function's 3nd derivative at a.
+@param f4a The value of the function's 4nd derivative at a.
+@return A PolyFunc that contains the specified properties.
+'''
+def createSpline11111(a, fa, f1a, f2a, f3a, f4a):
+#This just interpolates it as a parabola for simplicity, TODO
+    c4 = 0;
+    c3 = 0;
+    c2 = f2a / 2;
+    c1 = f1a - (f2a * a);
+    c0 = fa - (c2 * (a**2)) - (c1 * a);
+
+    return PolyFunc((c0,c1,c2,c3,c4));
+
+'''
+Creates a quartic polynomial function with 1 specified value, 2 specified
+1st derivatives, and 2 2nd derivatives.
+@param a The 1st point to specify values at.
+@param b The 2nd point to specify values at.
+@param fa The value of the function at a.
+@param f1a The value of the function's 1st derivative at a.
+@param f1b The value of the function's 1st derivative at b.
+@param f2a The value of the function's 2nd derivative at a.
+@param f2b The value of the function's 2nd derivative at b.
+@return A PolyFunc that contains the specified properties.
+@raises ValueError If a and b are the same points.
+'''
+def createSpline12200(a, b, fa, f1a, f1b, f2a, f2b):
+    if(a == b):
+        raise ValueError("Cannot use the same point for both endpoints of a spline.");
+    #Calculate the difference between the endpoints.
+    dx = a-b;
+
+    #Calculate the intermediary parameters of the spline.
+    A0 = ((f2a * dx) - (2 * f1a)) / (dx**3);
+    B0 = ((f2b * dx) + (2 * f1b)) / (dx**3);
+    if(A0 == 0):
+        c = 1;
+    else:
+        c = a - (f1a / (A0 * (dx**2)));
+    if(B0 == 0):
+        d = 1;
+    else:
+        d = b - (f1b / (B0 * (dx**2)));
+    f = fa - ((a**4) * (A0 + B0) / 4) + ((a**3) * ((A0 * ((2 * b) + c)) + (B0 * ((2 * a) + d))) / 3) - ((a**2) * ((A0 * ((b**2) + (2 * b * c))) + (B0 * ((a**2) + (2 * a * d)))) / 2) + (a * (A0 * c * (b**2)) + (B0 * d * (a**2)));
+
+    #Compute the polynomial coeffecients.
+    c0 = f;
+    c1 = -(A0 * c * (b**2)) - (B0 * d * (a**2));
+    c2 = ((A0 * ((b**2) + (2 * b * c))) + (B0 * ((a**2) + (2 * a * d)))) / 2;
+    c3 = -((A0 * ((2 * b) + c)) + (B0 * ((2 * a) + d))) / 3;
+    c4 = (A0 + B0) / 4;
+
+    return PolyFunc((c0,c1,c2,c3,c4));
+
+'''
+Creates a quartic polynomial function with 2 specified values, 2 specified
+1st derivatives, and 1 2nd derivative.
+@param a The 1st point to specify values at.
+@param b The 2nd point to specify values at.
+@param fa The value of the function at a.
+@param fb The value of the function at b.
+@param f1a The value of the function's 1st derivative at a.
+@param f1b The value of the function's 1st derivative at b.
+@param f2a The value of the function's 2nd derivative at a.
+@return A PolyFunc that contains the specified properties.
+@raises ValueError If a and b are the same points.
+'''
+def createSpline22100(a,b,fa,fb,f1a,f1b,f2a):
+    if(a == b):
+        raise ValueError("Cannot use the same point for both endpoints of a spline.");
+    #Calculate the difference between the endpoints.
+    dx = a-b;
+
+    #Calculate the intermediary parameters of the spline.
+    A0 = +((fa * dx) - (a * ((f1a * dx) - (3 * fa)))) / (dx**4);
+    B0 = -((fb * dx) - (b * ((f1b * dx) + (3 * fb)))) / (dx**4);
+    if(A0 == 0):
+        c = 1;
+    else:
+        c = +((f1a * dx) - (3 * fa)) / (A0 * (dx**4));
+    if(B0 == 0):
+        d = 1;
+    else:
+        d = -((f1b * dx) + (3 * fb)) / (B0 * (dx**4));
+    f = (f2a / (2 * (dx**2))) - (3 * A0 * (((c * dx) + (c * a) + 1) / dx));
+
+    #Compute the polynomial coeffcients.
+    c0 = (f * (a**2) * (b**2)) - (A0 * (b**3)) - (B0 * (a**3));
+    c1 = ((b**2) * A0 * (3 - (b * c))) + ((a**2) * B0 * (3 - (a * d))) - (2 * f * ((a * (b**2)) + (b * (a**2))));
+    c2 = -(b * A0 * (3 - (3 * b * c))) - (a * B0 * (3 - (3 * a * d))) + (f * ((b**2) + (4 * a * b) + (a **2)));
+    c3 = (A0 * (1 - (3 * b * c))) + (B0 * (1 - (3 * a * d))) - (2 * f * (a + b));
+    c4 = (A0 * c) + (B0 * d) + f;
+
+    return PolyFunc((c0,c1,c2,c3,c4));
+
+'''
+Creates a quartic polynomial function with 2 specified values, 2 specified
+1st derivatives, and 1 3rd derivative.
+@param a The 1st point to specify values at.
+@param b The 2nd point to specify values at.
+@param fa The value of the function at a.
+@param fb The value of the function at b.
+@param f1a The value of the function's 1st derivative at a.
+@param f1b The value of the function's 1st derivative at b.
+@param f3a The value of the function's 3rd derivative at a.
+@return A PolyFunc that contains the specified properties.
+@raises ValueError If a and b are the same points.
+'''
+def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
+    if(a == b):
+        raise ValueError("Cannot use the same point for both endpoints of a spline.");
+    #Calculate the difference between the endpoints.
+    dx = a-b;
+
+    #Calculate the intermediary parameters of the spline.
+    A0 = +((fa * dx) - (a * ((f1a * dx) - (3 * fa)))) / (dx**4);
+    B0 = -((fb * dx) - (b * ((f1b * dx) + (3 * fb)))) / (dx**4);
+    if(A0 == 0):
+        c = 1;
+    else:
+        c = +((f1a * dx) - (3 * fa)) / (A0 * (dx**4));
+    if(B0 == 0):
+        d = 1;
+    else:
+        d = -((f1b * dx) + (3 * fb)) / (B0 * (dx**4));
+    f = (((f3a / 6) - (B0 * (1 - (d * a))) - (A0 * (1 - (b * c)))) / (2 * dx)) - (c * A0)
+
+    #Compute the polynomial coeffcients.
+    c0 = (f * (a**2) * (b**2)) - (A0 * (b**3)) - (B0 * (a**3));
+    c1 = ((b**2) * A0 * (3 - (b * c))) + ((a**2) * B0 * (3 - (a * d))) - (2 * f * ((a * (b**2)) + (b * (a**2))));
+    c2 = -(b * A0 * (3 - (3 * b * c))) - (a * B0 * (3 - (3 * a * d))) + (f * ((b**2) + (4 * a * b) + (a **2)));
+    c3 = (A0 * (1 - (3 * b * c))) + (B0 * (1 - (3 * a * d))) - (2 * f * (a + b));
+    c4 = (A0 * c) + (B0 * d) + f;
+
+    return PolyFunc((c0,c1,c2,c3,c4));
+
+#==================================================================================================================
+#OTHER STUFF!!!
 
 #TODO make this something other than JUST a linear histogram recorder
 class Recorder:
