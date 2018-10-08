@@ -7,72 +7,6 @@ import numpy as np;
 import subprocess as sproc;
 import threading;
 
-class Histogram:
-    def __init__(self, filePath):
-        with open(filePath) as file:
-            self.bins = np.array(list(map(float, next(file)[:-2].split(','))));
-            self.times = [];
-            self.data = [];
-            for line in file:
-                self.times.append(float(line[(line.index("t=") + 2):line.index(':')]));
-                self.data.append(list(map(float, line[(line.index(':') + 1):-2].split(','))));
-            self.times = np.array(self.times);
-            self.data = np.array(self.data);
-
-    def interpolate(self, frame=-1):
-        X = (self.bins[1:] + self.bins[:-1]) / 2;
-        normalizer = 0;
-        lastPoint = self.data[frame][1]
-        for point in self.data[frame][2:-1]:
-            normalizer += min(lastPoint, point) + (abs(point - lastPoint) / 2);
-            lastPoint = point;
-        normalizer *= (self.bins[1] - self.bins[0]);
-        Y = self.data[frame][1:-1] / normalizer;
-        return (X, Y);
-
-class Animator:
-    def __init__(self, histogram):
-        self.left = histogram.bins[:-1];
-        self.right = histogram.bins[1:];
-        self.bottom = np.zeros(len(self.left));
-        self.top = histogram.data[0][1:-1];
-        self.histogram = histogram;
-
-        vertexCount = 5 * len(self.left);
-        self.vertices = np.zeros((vertexCount, 2));
-        codes = np.ones(vertexCount, int) * path.Path.LINETO;
-        codes[0::5] = path.Path.MOVETO;
-        codes[4::5] = path.Path.CLOSEPOLY;
-        self.vertices[0::5, 0] = self.left;
-        self.vertices[0::5, 1] = self.bottom;
-        self.vertices[1::5, 0] = self.left;
-        self.vertices[1::5, 1] = self.top;
-        self.vertices[2::5, 0] = self.right;
-        self.vertices[2::5, 1] = self.top;
-        self.vertices[3::5, 0] = self.right;
-        self.vertices[3::5, 1] = self.bottom;
-
-        self.fig, self.ax = plt.subplots();
-        graphPath = path.Path(self.vertices, codes);
-        self.patch = patches.PathPatch(graphPath, facecolor='blue', edgecolor='black');
-        self.ax.add_patch(self.patch);
-        self.ax.set_xlim(self.left[0], self.right[-1]);
-        self.ax.set_ylim(0, (np.sum(histogram.data[0]) / 2));
-        self.fig.suptitle("Time = 0");
-
-    def animate(self, index):
-        self.top = self.histogram.data[index][1:-1];
-        self.vertices[1::5, 1] = self.top;
-        self.vertices[2::5, 1] = self.top;
-        self.fig.suptitle("Time = " + str(self.histogram.times[index]) + "s");
-        return self.patch;
-
-def polyFunction(coefficients, x):
-    value = 0;
-    for counter in range(len(coefficients)):
-        value += coefficients[counter] * (x**counter);
-    return value;
-
 import scipy as sp
 #from scipy.optimize import brentq
 from scipy.special import erfi
@@ -171,6 +105,66 @@ class FilyDensityCode:
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
 
+class Histogram:
+    def __init__(self, filePath):
+        with open(filePath) as file:
+            self.bins = np.array(list(map(float, next(file)[:-2].split(','))));
+            self.times = [];
+            self.data = [];
+            for line in file:
+                self.times.append(float(line[(line.index("t=") + 2):line.index(':')]));
+                self.data.append(list(map(float, line[(line.index(':') + 1):-2].split(','))));
+            self.times = np.array(self.times);
+            self.data = np.array(self.data);
+
+    def interpolate(self, frame=-1):
+        X = (self.bins[1:] + self.bins[:-1]) / 2;
+        normalizer = 0;
+        lastPoint = self.data[frame][1]
+        for point in self.data[frame][2:-1]:
+            normalizer += min(lastPoint, point) + (abs(point - lastPoint) / 2);
+            lastPoint = point;
+        normalizer *= (self.bins[1] - self.bins[0]);
+        Y = self.data[frame][1:-1] / normalizer;
+        return (X, Y);
+
+class Animator:
+    def __init__(self, histogram):
+        self.left = histogram.bins[:-1];
+        self.right = histogram.bins[1:];
+        self.bottom = np.zeros(len(self.left));
+        self.top = histogram.data[0][1:-1];
+        self.histogram = histogram;
+
+        vertexCount = 5 * len(self.left);
+        self.vertices = np.zeros((vertexCount, 2));
+        codes = np.ones(vertexCount, int) * path.Path.LINETO;
+        codes[0::5] = path.Path.MOVETO;
+        codes[4::5] = path.Path.CLOSEPOLY;
+        self.vertices[0::5, 0] = self.left;
+        self.vertices[0::5, 1] = self.bottom;
+        self.vertices[1::5, 0] = self.left;
+        self.vertices[1::5, 1] = self.top;
+        self.vertices[2::5, 0] = self.right;
+        self.vertices[2::5, 1] = self.top;
+        self.vertices[3::5, 0] = self.right;
+        self.vertices[3::5, 1] = self.bottom;
+
+        self.fig, self.ax = plt.subplots();
+        graphPath = path.Path(self.vertices, codes);
+        self.patch = patches.PathPatch(graphPath, facecolor='blue', edgecolor='black');
+        self.ax.add_patch(self.patch);
+        self.ax.set_xlim(self.left[0], self.right[-1]);
+        self.ax.set_ylim(0, (np.sum(histogram.data[0]) / 2));
+        self.fig.suptitle("Time = 0");
+
+    def animate(self, index):
+        self.top = self.histogram.data[index][1:-1];
+        self.vertices[1::5, 1] = self.top;
+        self.vertices[2::5, 1] = self.top;
+        self.fig.suptitle("Time = " + str(self.histogram.times[index]) + "s");
+        return self.patch;
+
 def viewHistogram(dataFile):
     histogram = Histogram(dataFile);
     animator = Animator(histogram);
@@ -178,8 +172,39 @@ def viewHistogram(dataFile):
     plt.show();
     plt.close();
 
+def polyFunction(coefficients, x):
+    value = 0;
+    for counter in range(len(coefficients)):
+        value += coefficients[counter] * (x**counter);
+    return value;
+
+#TODO make this something other than JUST a linear histogram recorder
+class Recorder:
+    def __init__(self, type, min, max, count):
+        self.type = type;
+        self.binMin = min;
+        self.binMax = max;
+        self.binCount = count;
+
+    def __str__(self):
+        return self.type + ' ' + str(self.binMin) + ',' + str(self.binMax) + ',' + str(self.binCount);
+
+#TODO make this something other than JUST a poly force
+class Force:
+    def __init__(self, coefficients):
+        self.coefficients = coefficients;
+
+    def __str__(self):
+        return "poly" + ' ' + ','.join(map(str, self.coefficients));
+
+    def act(self, x):
+        value = 0;
+        for counter in range(len(self.coefficients)):
+            value += self.coefficients[counter] * (x**counter);
+        return value;
+
 def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=50000, duration=60, timestep=0.05, diffusion=1, tau=1, dataDelay=20):
-    print(str(index) + ":\t Starting...";
+    print(str(index) + ":\tStarting...");
     #Create the command for running the simulation.
     command = "./simulate " + str(outputPath) + " -f " + str(force);
     if(posRecorder):
@@ -189,11 +214,12 @@ def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRe
     if(noiseRecorder):
         command += " -nr " + str(noiseRecorder);
     command += " -p " + str(particleCount) + " -t " + str(duration) + " -dt "+ str(timestep) + " -d " + str(diffusion) + " -m " + str(tau) + " -dd " + str(dataDelay);
-
+    print(command);
     #Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
-    if(sproc.call(command.split()) != 0):
-        raise RuntimeError(str(tau) + ":\tFailed to run! Process returned: " + str(runReturn));
+    returnVal = sproc.call(command.split());
+    if(returnVal != 0):
+        raise RuntimeError(str(tau) + ":\tFailed to run! Process returned: " + str(returnVal));
 
     print(str(index) + ":\tExporting results...");
     if(posRecorder):
@@ -201,19 +227,15 @@ def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRe
         prediction = predicter.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), tau, diffusion);
         positionXY = Histogram(str(outputPath) + ".pos").interpolate();
         ax = plt.gca();
-		X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 10);
-		ax.plot(X, force(X), 'g');
-		ax = ax.twinx();
-		ax.plot(X, prediction(X), 'b');
-		ax.plot(positionXY[0], positionXY[1], 'r');
-		plt.savefig(str(outputPath) + ".png",fmt='png',dpi=1000);
-		plt.close();
-    if(forceRecorder):
-        forceXY = Histogram(str(outputPath) + ".force").interpolate();
-        #TODO
-    if(noiseRecorder):
-        noiseXY = Histogram(str(outputPath) + ".noise").interpolate();
-        #TODO
+        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 10);
+        ax.plot(X, force.act(X), 'g');
+        ax = ax.twinx();
+        ax.plot(X, prediction(X), 'b');
+        ax.plot(positionXY[0], positionXY[1], 'r');
+        plt.savefig(str(outputPath) + ".png",fmt='png',dpi=1000);
+        plt.close();
+
+runSimulation(0, "Results/test", Force([1, 0, 1]), FilyDensityCode([1,0,1]), Recorder("linear", -10, 10, 200));
 
 #need this in the recorders binMin, binMax, binCount!!
 #and also other stuff for the force too.

@@ -1,6 +1,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <iostream>
 #include <random>
 #include <sstream>
 #include <string>
@@ -160,10 +161,40 @@ void runSimulation(force::Force& force, histogram::Recorder* posRecorder, histog
 //-nr <histo_type> <histo_parameters>
 int main(int argc, char* argv[])
 {
-    std::string outputFile = argv[1];
-    
-    //Load default values for simulation parameters
+    //Convert char arrays to lowercase strings for parsing.
+    std::string args[argc];
+    for(int i = 0; i < argc; i++)
+    {
+        args[i] = std::string(argv[i]);
+        std::transform(args[i].begin(), args[i].end(), args[i].begin(), std::tolower());
+    }
+
+    //Load the path of the output file.
+    std::string outputFile = args[1];
+
+    //Load the force.
     force::Force* force = NULL;
+    if(args[2] == "poly")
+    {
+        std::vector<std::string> parameters = parseCommaDelimitedString(args[3]);
+        std::vector<double> coeffecients;
+        for(const auto& p : parameters)
+        {
+            coeffecients.push_back(std::stod(p));
+        }
+
+        force = new force::PolyForce(coeffecients);
+    } else
+    if(args[2] == "linear")
+    {
+        std::vector<std::string> parameters = parseCommaDelimitedString(args[3]);
+        force = new force::LinearForce(std::stod(parameters[0]), std::stod(parameters[1]));
+    } else{
+        std::cout << "Unknown force type: " + args[2];
+        return 1;
+    }
+
+    //Set default values for simulation parameters.
     histogram::Recorder* posRecorder = NULL;
     histogram::Recorder* forceRecorder = NULL;
     histogram::Recorder* noiseRecorder = NULL;
@@ -174,76 +205,50 @@ int main(int argc, char* argv[])
     double memory = 1;
     unsigned long dataDelay = 20;
 
-    //Parse command line parameters TODO make this better at not messing up when incorrect parameters are parsed...
-    for(auto i = 1; i < argc; i++)
+    //Parse additional command line parameters.
+    for(auto i = 4; i < argc; i++)
     {
-        if(argv[i] == "-f")
+        if(args[i] == "-pr")
         {
-            if(argv[i+1] == "poly")
-            {
-                std::vector<std::string> parameters = parseCommaDelimitedString(argv[i+2]);
-                std::vector<double> coeffecients;
-                for(const auto& p : parameters)
-                {
-                    coeffecients.push_back(std::stod(p));
-                }
-
-                force = new force::PolyForce(coeffecients);
-            } else
-            if(argv[i+1] == "linear")
-            {
-                std::vector<std::string> parameters = parseCommaDelimitedString(argv[i+2]);
-                force = new force::LinearForce(std::stod(parameters[0]), std::stod(parameters[1]));
-            } else{
-                //TODO unknown parameter
-                return 1;
-            }
+            posRecorder = createRecorder(args[i+1], args[i+2]);
+            i += 2;
         } else
-        if(argv[i] == "-pr")
+        if(args[i] == "-fr")
         {
-            posRecorder = createRecorder(argv[i+1], argv[i+2]);
+            forceRecorder = createRecorder(args[i+1], args[i+2]);
+            i += 2;
         } else
-        if(argv[i] == "-fr")
+        if(args[i] == "-nr")
         {
-            forceRecorder = createRecorder(argv[i+1], argv[i+2]);
+            noiseRecorder = createRecorder(args[i+1], args[i+2]);
+            i += 2;
         } else
-        if(argv[i] == "-nr")
+        if(args[i] == "-p")
         {
-            noiseRecorder = createRecorder(argv[i+1], argv[i+2]);
+            particleCount = std::stoul(args[++i]);
         } else
-        if(argv[i] == "-p")
+        if(args[i] == "-t")
         {
-            particleCount = std::stoul(argv[++i]);
+            duration = std::stod(args[++i]);
         } else
-        if(argv[i] == "-t")
+        if(args[i] == "-dt")
         {
-            duration = std::stod(argv[++i]);
+            timestep = std::stod(args[++i]);;
         } else
-        if(argv[i] == "-dt")
+        if(args[i] == "-d")
         {
-            timestep = std::stod(argv[++i]);;
+            diffusion = std::stod(args[++i]);
         } else
-        if(argv[i] == "-d")
+        if(args[i] == "-m")
         {
-            diffusion = std::stod(argv[++i]);
+            memory = std::stod(args[++i]);
         } else
-        if(argv[i] == "-m")
+        if(args[i] == "-dd")
         {
-            memory = std::stod(argv[++i]);
-        } else
-        if(argv[i] == "-dd")
-        {
-            dataDelay = std::stoul(argv[++i]);
+            dataDelay = std::stoul(args[++i]);
         } else{
-            //TODO unknown specified
-            return 1;
+            std::cout << "Unknown parameter: " + args[i];
         }
-    }
-
-    if(!force)
-    {
-        //TODO no force?
-        return 1;
     }
 
     runSimulation(*force, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay);
