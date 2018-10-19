@@ -85,7 +85,7 @@ class FilyDensityCode:
             jumps_per_region[j1].append([i1,k,-1]) # outgoing jump in region j1
             jumps_per_region[j2].append([i2,k, 1]) # incoming jump in region j2
         jumps_per_region = [ sorted(jpr) for jpr in jumps_per_region ]
-        q0 = sp.sqrt(tau/(2*sp.pi*diffusion))
+        self.q0 = sp.sqrt(tau/(2*sp.pi*diffusion))
         bins = [-sp.inf];
         vals = [[0,1]];
         for j,jpr in enumerate(jumps_per_region):
@@ -107,7 +107,7 @@ class FilyDensityCode:
 
     def p(self, x, tau, diffusion, E, bins, vals):
         a,b = vals[sp.digitize(x,bins)-1].T
-        return self.d2U_(x)*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
+        return self.d2U_(x)*self.q0*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
 
 #==================================================================================================================
 # Utilities for recording and visualing collected data
@@ -515,7 +515,6 @@ runSimulation(0, "Results/test", Force([1, 0, 1]), FilyDensityCode([1,0,1]), Rec
 #need this in the recorders binMin, binMax, binCount!!
 #and also other stuff for the force too.
 #def polySimB(coefficients, tau=1, diffusion=1, particles=50000, binCount=200, binMinP=-10, binMaxP=10):#, binMinF=-1, binMaxF=1
-
 def runPolySim(coefficients, tau=1, diffusion=1, dt=0.005, particles=20000, duration=30, dataDelay=200, binCount=500, binMinP=-10, binMaxP=10, binMinF=-1, binMaxF=1, parallel=True):
     try:
         if(parallel):
