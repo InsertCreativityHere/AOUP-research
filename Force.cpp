@@ -3,7 +3,7 @@
 
 namespace force
 {
-    std::vector<double> Force::getForceForAll(const std::vector<double>& positions)
+    std::vector<double> Force::getForceForAll(const std::vector<double>& positions) const
     {
         auto forces = positions;
         for(auto& convert : forces)
@@ -19,7 +19,7 @@ namespace force
     {
     }
     
-    double LinearForce::getForce(double position)
+    double LinearForce::getForce(double position) const
     {
         return (position - center) * intensity;
     }
@@ -29,7 +29,7 @@ namespace force
     {
     }
 
-    double PolyForce::getForce(double position)
+    double PolyForce::getForce(double position) const
     {
         double totalForce = 0;
         double temp = 1;
@@ -40,5 +40,27 @@ namespace force
         }
 
         return totalForce;
+    }
+
+    PieceForce::PieceForce(std::vector<Force*> forces, std::vector<double> bounds, std::vector<bool> directions):
+    forces(forces), bounds(bounds), directions(directions)
+    {
+    }
+
+    double PieceForce::getForce(double position) const
+    {
+        int i = 0;
+        for(; i < bounds.size(); i++)
+        {
+            if(bounds[i] <= position)
+            {
+                if((bounds[i] == position) && (directions[i]))
+                {
+                    i++;
+                }
+                break;
+            }
+        }
+        return forces[i]->getForce(position);
     }
 }

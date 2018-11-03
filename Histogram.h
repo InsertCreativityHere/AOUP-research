@@ -19,7 +19,7 @@ namespace histogram
             double max;
     };
 
-    class LinearHistogram : public Histogram
+    class LinearHistogram : public virtual Histogram
     {
         public:
             LinearHistogram(unsigned long bins, double minimum, double maximum);
@@ -30,7 +30,7 @@ namespace histogram
             double width;
     };
 
-    class CustomHistogram : public Histogram
+    class CustomHistogram : public virtual Histogram
     {
         public:
             CustomHistogram(std::vector<double> bins);

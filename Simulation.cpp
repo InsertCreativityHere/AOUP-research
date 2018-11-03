@@ -1,4 +1,6 @@
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -166,7 +168,7 @@ int main(int argc, char* argv[])
     for(int i = 0; i < argc; i++)
     {
         args[i] = std::string(argv[i]);
-        std::transform(args[i].begin(), args[i].end(), args[i].begin(), std::tolower());
+        std::transform(args[i].begin(), args[i].end(), args[i].begin(), tolower);
     }
 
     //Load the path of the output file.
