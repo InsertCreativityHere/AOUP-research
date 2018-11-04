@@ -28,6 +28,8 @@ namespace force
     {
         public:
             PolyForce(std::vector<double> coefficients);
+            PolyForce derivative();
+            PolyForce integrate(double c);
             double getForce(double position) const;
 
         private:

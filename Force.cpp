@@ -29,6 +29,27 @@ namespace force
     {
     }
 
+    PolyForce PolyForce::derivative()
+    {
+        std::vector<double> parameters(coefficients.size() - 1);
+        for(int i = 1; i < coefficients.size(); i++)
+        {
+            parameters.push_back(i * coefficients[i]);
+        }
+        return PolyForce(parameters);
+    }
+
+    PolyForce PolyForce::integrate(double c)
+    {
+        std::vector<double> parameters(coefficients.size() + 1);
+        parameters.push_back(c);
+        for(int i = 0; i < coefficients.size(); i++)
+        {
+            parameters.push_back(coefficients[i] / (i + 1));
+        }
+        return PolyForce(parameters);
+    }
+
     double PolyForce::getForce(double position) const
     {
         double totalForce = 0;
