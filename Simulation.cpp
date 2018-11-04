@@ -55,9 +55,11 @@ std::vector<double> generateNormal(unsigned long size, double mean, double stdde
 }
 
 /**
- * TODO
+ * Converts a comma-delimited string into a vector of substrings split across the occurence of commas.
+ * @param str The string to parse comma delimited substrings from.
+ * @return A vector of substrings containing the characters in between commas within each entry.
  **/
-std::vector<std::string> parseCommaDelimitedString(const std::string& str)
+std::vector<std::string> parseDelimitedString(const std::string& str, const char delimiter)
 {
     std::vector<std::string> result;
     std::stringstream stringStream;
@@ -70,7 +72,7 @@ std::vector<std::string> parseCommaDelimitedString(const std::string& str)
     while(stringStream.good())
     {
         std::string subString;
-        std::getline(stringStream, subString, ',');
+        std::getline(stringStream, subString, delimiter);
         result.push_back(subString);
     }
 
@@ -78,11 +80,17 @@ std::vector<std::string> parseCommaDelimitedString(const std::string& str)
 }
 
 /**
- * TODO
+ * Converts string arguments into a histogram recorder.
+ * @param type The type of histogram recorder to create.
+ *        linear = A histogram with equally spaced bins.
+ *        custom = A histogram with customly specified bins.
+ * @param parameters A comma delimited list of parameters, these are used to initialize the specified histogram type.
+ *                   For further information on these, check the parameters for each type of histogram in Histogram.h.
+ * @return A new histogram and a recorder on top of it, all according to the specified type and parameeters,
  **/
 histogram::Recorder* createRecorder(const std::string& type, const std::string& parameters)
 {
-    std::vector<std::string> paramVector = parseCommaDelimitedString(parameters);
+    std::vector<std::string> paramVector = parseDelimitedString(parameters, ',');
     if(type == "linear")
     {
         auto histo = histogram::LinearHistogram(std::stoul(paramVector[0]), std::stod(paramVector[1]), std::stod(paramVector[2]));
@@ -90,13 +98,79 @@ histogram::Recorder* createRecorder(const std::string& type, const std::string& 
     } else
     if(type == "custom")
     {
-        std::vector<double> bins;
-        for(const auto& p :paramVector)
+        std::vector<double> bins(paramVector.size());
+        for(const auto& p : paramVector)
         {
             bins.push_back(std::stod(p));
         }
         auto histo = histogram::CustomHistogram(bins);
         return new histogram::Recorder(histo);
+    } else{
+        return NULL;
+    }
+}
+
+/**
+ * Converts string arguments into a force.
+ * @param type The type of force to create.
+ *        linear = A force that varies linearly over space.
+ *        poly = A force modeled by a polynomial function.
+ *        piece = A force conprised of separate pieces. (it's parameters are further delineated by '~'s)
+ * @param parameters A comma delimited list of parameters, these are used to intialize the specified force type.
+ *                   For further information on these, check the parameters for each type of force in Force.h.
+ * @return a new force created according to the specified type and parameters.
+ **/
+force::Force* createForce(const std::string& type, const std::string& parameters)
+{
+    std::vector<std::string> paramVector = parseDelimitedString(parameters, ',');
+    if(type == "linear")
+    {
+        return new force::LinearForce(std::stod(paramVector[0]), std::stod(paramVector[1]));
+    } else
+    if(type == "poly")
+    {
+        std::vector<double> coeffecients(paramVector.size());
+        for(const auto& p : paramVector)
+        {
+            coeffecients.push_back(std::stod(p));
+        }
+        return new force::PolyForce(coeffecients);
+    } else
+    if(type == "piece")
+    {
+        std::vector<std::string> forceParams = parseDelimitedString(paramVector[0], '~');
+        std::vector<std::string> boundParams = parseDelimitedString(paramVector[1], '~');
+        std::vector<std::string> directionParams = parseDelimitedString(paramVector[2], '~');
+
+        std::vector<force::Force*> forces(forceParams.size());
+        std::vector<double> bounds(boundParams.size());
+        std::vector<bool> directions(directionParams.size());
+
+        for(auto& f : forceParams)
+        {
+            std::replace(f.begin(), f.end(), '~', ',');
+            auto pos = f.find(",");
+            forces.push_back(createForce(f.substr(0, pos), f.substr(pos)));
+        }
+        for(const auto& b : boundParams)
+        {
+            bounds.push_back(std::stod(b));
+        }
+        for(const auto& d : directionParams)
+        {
+            if(d == "true")
+            {
+                directions.push_back(true);
+            } else
+            if(d == "false")
+            {
+                directions.push_back(false);
+            } else{
+                throw std::invalid_argument("No valid conversion found from string to boolean for malformed string.");
+            }
+        }
+    } else{
+        return NULL;
     }
 }
 
@@ -178,7 +252,7 @@ int main(int argc, char* argv[])
     force::Force* force = NULL;
     if(args[2] == "poly")
     {
-        std::vector<std::string> parameters = parseCommaDelimitedString(args[3]);
+        std::vector<std::string> parameters = parseDelimitedString(args[3], ',');
         std::vector<double> coeffecients;
         for(const auto& p : parameters)
         {
@@ -189,7 +263,7 @@ int main(int argc, char* argv[])
     } else
     if(args[2] == "linear")
     {
-        std::vector<std::string> parameters = parseCommaDelimitedString(args[3]);
+        std::vector<std::string> parameters = parseDelimitedString(args[3], ',');
         force = new force::LinearForce(std::stod(parameters[0]), std::stod(parameters[1]));
     } else{
         std::cout << "Unknown force type: " + args[2];
