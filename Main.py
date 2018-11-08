@@ -19,7 +19,7 @@ import itertools as itt
 import matplotlib.pyplot as plt
 import copy;
 
-class DensityPrediction:
+class DensityPredictor:
     def __init__(self, coefficients):
         coefficients = list(coefficients);
         for counter in range(len(coefficients)):
@@ -484,66 +484,50 @@ class CustomHistogram:
 
 #==================================================================================================================
 #TODO DOWN
+def runSimulation(index, force, outputFile=None, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=None, memory=None, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    print(str(index) + ":\tInitializing...");
 
-
-
-def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=50000, duration=60, timestep=0.05, diffusion=1, tau=1, dataDelay=20):
-    print(str(index) + ":\tStarting...");
-    #Create the command for running the simulation.
-    command = "./simulate " + str(outputPath) + " -f " + str(force);
+    # Create the command for running the simulation.
+    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " " + str(force);
+    if(outputFile):
+        command += " -of " + str(outputfile);
     if(posRecorder):
         command += " -pr " + str(posRecorder);
     if(forceRecorder):
         command += " -fr " + str(forceRecorder);
     if(noiseRecorder):
         command += " -nr " + str(noiseRecorder);
-    command += " -p " + str(particleCount) + " -t " + str(duration) + " -dt "+ str(timestep) + " -d " + str(diffusion) + " -m " + str(tau) + " -dd " + str(dataDelay);
-    print(command);
-    #Run the simulation.
-    print(str(index) + ":\tRunning Simulation...");
-    returnVal = sproc.call(command.split());
-    if(returnVal != 0):
-        raise RuntimeError(str(tau) + ":\tFailed to run! Process returned: " + str(returnVal));
+    if(particleCount):
+        command += " -n " + str(particleCount);
+    if(duration):
+        command += " -t " + str(duration);
+    if(timestep):
+        command += " -dt " + str(timestep);
+    if(diffusion):
+        command += " -d " + str(diffusion);
+    if(memory):
+        command += " -m " + str(memory);
+    if(dataDelay):
+        command += " -dd " + str(dataDelay);
+    if(startBounds):
+        command += " -sb " + str(startBounds[0]) + " " + str(startBounds[1]);
+    if(activeForces):
+        command += " -af " + str(activeForces[0]) + " " + str(activeForces[1]);
+    if(noise):
+        command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
+    # Run the simulation.
+    print(str(index) + ":\tRunning Simulation...");
+    returnVal = sproc.call(command);
+    if(returnVal != 0):
+        raise (str(tau) + ":\tFailed to execute! Process returned: " + str(returnVal));
+
+    # Export the results.
     print(str(index) + ":\tExporting results...");
     if(posRecorder):
         print(str(index) + ":\tGenerating prediction...");
-        prediction = predicter.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), tau, diffusion);
-        positionXY = Histogram(str(outputPath) + ".pos").interpolate();
-        ax = plt.gca();
-        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 10);
-        ax.plot(X, force.act(X), 'g');
-        ax = ax.twinx();
-        ax.plot(X, prediction(X), 'b');
-        ax.plot(positionXY[0], positionXY[1], 'r');
-        plt.savefig(str(outputPath) + ".png",fmt='png',dpi=1000);
-        plt.close();
-
-runSimulation(0, "Results/test", Force([1, 0, 1]), DensityPrediction([1,0,1]), Recorder("linear", -10, 10, 200));
-
-#need this in the recorders binMin, binMax, binCount!!
-#and also other stuff for the force too.
-#def polySimB(coefficients, tau=1, diffusion=1, particles=50000, binCount=200, binMinP=-10, binMaxP=10):#, binMinF=-1, binMaxF=1
-def runPolySim(coefficients, tau=1, diffusion=1, dt=0.005, particles=20000, duration=30, dataDelay=200, binCount=500, binMinP=-10, binMaxP=10, binMinF=-1, binMaxF=1, parallel=True):
-    try:
-        if(parallel):
-            threads = [];
-            for i in range(len(tau)):
-                threads.append(threading.Thread(target=PolySimA, args=[coefficients, tau[i], diffusion, dt, particles, duration, dataDelay, binCount, binMinP, binMaxP, binMinF, binMaxF, str(i)]));
-                threads[-1].start();
-            for i in range(len(tau)):
-                threads[i].join();
-                polySimB(coefficients, tau[i], diffusion, particles, binCount, binMinP, binMaxP);
-        else:
-            for t in tau:
-                PolySimA(coefficients, t, diffusion, dt, particles, duration, dataDelay, binCount, binMinP, binMaxP, binMinF, binMaxF);
-                polySimB(coefficients, t, diffusion, particles, binCount, binMinP, binMaxP);
-    except TypeError:
-        PolySimA(coefficients, tau, diffusion, dt, particles, duration, dataDelay, binCount, binMinP, binMaxP, binMinF, binMaxF);
-        polySimB(coefficients, tau, diffusion, particles, binCount, binMinP, binMaxP);
-    print("Finished!");
-
-
-
-
-
+        #TODO
+    if(forceRecorder):
+        pass;
+    if(noiseRecorder):
+        pass;
