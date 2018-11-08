@@ -19,19 +19,19 @@ import itertools as itt
 import matplotlib.pyplot as plt
 import copy;
 
-class FilyDensityCode:
+class DensityPrediction:
     def __init__(self, coefficients):
         coefficients = list(coefficients);
         for counter in range(len(coefficients)):
             coefficients[counter] *= counter;
         coefficients = coefficients[1:];
         duTemp = copy.deepcopy(coefficients);
-        self.dU_ = polyFunc(duTemp);
+        self.dU_ = PolyFunc(duTemp);
         for counter in range(len(coefficients)):
             coefficients[counter] *= counter;
         coefficients = coefficients[1:];
         d2uTemp = copy.deepcopy(coefficients);
-        self.d2U_ = polyFunc(d2uTemp);
+        self.d2U_ = PolyFunc(d2uTemp);
 
     def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
         X = sp.linspace(xMin, xMax, sampleCount);
@@ -195,8 +195,8 @@ class PolyFunc:
     def __len__(self):
         return len(self.c);
 
-    def __repr__(self):
-        return "y = TODO";
+    def __str__(self):
+        return ("\"poly" + str(self.c)[1:-1] + "\"");
 
     def __call__(self, x):
         return np.dot(self.c, np.power(x, np.arange(len(self))));
@@ -235,8 +235,16 @@ class PieceFunc:
     def __getitem__(self, index):
         return self.functions[index];
 
-    def __repr__(self):
-        return "y = TODO";
+    def __str__(self):
+        s = "\"piece ";
+        for i in range(len(self.bounds)):
+            s += "\'" + str(self.functions[i]) + "\' " + str(self.bounds[i]) + " "
+            if((self.directions == None) or not directions[i]):
+                s += "0 ";
+            else:
+                s += "1 ";
+        s += "\'" + str(self.functions[-1]) + "\'\"";
+        return s;
 
     def __call__(self, x):
         for i in range(len(self.bounds)):
@@ -306,6 +314,9 @@ class DoubleWellFunc:
     def __call__(self, x):
         return self.function(x);
 
+    def __str__(self_):
+        return str(self.function);
+
 '''
 Creates a quartic polynomial function with with a specified value, 1st, 2nd, 3rd,
 and 4th derivative at a point
@@ -343,10 +354,10 @@ Creates a quartic polynomial function with 1 specified value, 2 specified
 def createSpline12200(a, b, fa, f1a, f1b, f2a, f2b):
     if(a == b):
         raise ValueError("Cannot use the same point for both endpoints of a spline.");
-    #Calculate the difference between the endpoints.
+    # Calculate the difference between the endpoints.
     dx = a-b;
 
-    #Calculate the intermediary parameters of the spline.
+    # Calculate the intermediary parameters of the spline.
     A0 = ((f2a * dx) - (2 * f1a)) / (dx**3);
     B0 = ((f2b * dx) + (2 * f1b)) / (dx**3);
     if(A0 == 0):
@@ -359,7 +370,7 @@ def createSpline12200(a, b, fa, f1a, f1b, f2a, f2b):
         d = b - (f1b / (B0 * (dx**2)));
     f = fa - ((a**4) * (A0 + B0) / 4) + ((a**3) * ((A0 * ((2 * b) + c)) + (B0 * ((2 * a) + d))) / 3) - ((a**2) * ((A0 * ((b**2) + (2 * b * c))) + (B0 * ((a**2) + (2 * a * d)))) / 2) + (a * (A0 * c * (b**2)) + (B0 * d * (a**2)));
 
-    #Compute the polynomial coeffecients.
+    # Compute the polynomial coeffecients.
     c0 = f;
     c1 = -(A0 * c * (b**2)) - (B0 * d * (a**2));
     c2 = ((A0 * ((b**2) + (2 * b * c))) + (B0 * ((a**2) + (2 * a * d)))) / 2;
@@ -384,10 +395,10 @@ Creates a quartic polynomial function with 2 specified values, 2 specified
 def createSpline22100(a,b,fa,fb,f1a,f1b,f2a):
     if(a == b):
         raise ValueError("Cannot use the same point for both endpoints of a spline.");
-    #Calculate the difference between the endpoints.
+    # Calculate the difference between the endpoints.
     dx = a-b;
 
-    #Calculate the intermediary parameters of the spline.
+    # Calculate the intermediary parameters of the spline.
     A0 = +((fa * dx) - (a * ((f1a * dx) - (3 * fa)))) / (dx**4);
     B0 = -((fb * dx) - (b * ((f1b * dx) + (3 * fb)))) / (dx**4);
     if(A0 == 0):
@@ -400,7 +411,7 @@ def createSpline22100(a,b,fa,fb,f1a,f1b,f2a):
         d = -((f1b * dx) + (3 * fb)) / (B0 * (dx**4));
     f = (f2a / (2 * (dx**2))) - (3 * A0 * (((c * dx) + (c * a) + 1) / dx));
 
-    #Compute the polynomial coeffcients.
+    # Compute the polynomial coeffcients.
     c0 = (f * (a**2) * (b**2)) - (A0 * (b**3)) - (B0 * (a**3));
     c1 = ((b**2) * A0 * (3 - (b * c))) + ((a**2) * B0 * (3 - (a * d))) - (2 * f * ((a * (b**2)) + (b * (a**2))));
     c2 = -(b * A0 * (3 - (3 * b * c))) - (a * B0 * (3 - (3 * a * d))) + (f * ((b**2) + (4 * a * b) + (a **2)));
@@ -425,10 +436,10 @@ Creates a quartic polynomial function with 2 specified values, 2 specified
 def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
     if(a == b):
         raise ValueError("Cannot use the same point for both endpoints of a spline.");
-    #Calculate the difference between the endpoints.
+    # Calculate the difference between the endpoints.
     dx = a-b;
 
-    #Calculate the intermediary parameters of the spline.
+    # Calculate the intermediary parameters of the spline.
     A0 = +((fa * dx) - (a * ((f1a * dx) - (3 * fa)))) / (dx**4);
     B0 = -((fb * dx) - (b * ((f1b * dx) + (3 * fb)))) / (dx**4);
     if(A0 == 0):
@@ -441,7 +452,7 @@ def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
         d = -((f1b * dx) + (3 * fb)) / (B0 * (dx**4));
     f = (((f3a / 6) - (B0 * (1 - (d * a))) - (A0 * (1 - (b * c)))) / (2 * dx)) - (c * A0)
 
-    #Compute the polynomial coeffcients.
+    # Compute the polynomial coeffcients.
     c0 = (f * (a**2) * (b**2)) - (A0 * (b**3)) - (B0 * (a**3));
     c1 = ((b**2) * A0 * (3 - (b * c))) + ((a**2) * B0 * (3 - (a * d))) - (2 * f * ((a * (b**2)) + (b * (a**2))));
     c2 = -(b * A0 * (3 - (3 * b * c))) - (a * B0 * (3 - (3 * a * d))) + (f * ((b**2) + (4 * a * b) + (a **2)));
@@ -451,32 +462,30 @@ def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
     return PolyFunc((c0,c1,c2,c3,c4));
 
 #==================================================================================================================
-#OTHER STUFF!!!
+# Utilities for creating histograms
+#TODO WE NEED COMMENTS AND DOCUMENTATION FOR THIS!
 
-#TODO make this something other than JUST a linear histogram recorder
-class Recorder:
-    def __init__(self, type, min, max, count):
-        self.type = type;
-        self.binMin = min;
-        self.binMax = max;
-        self.binCount = count;
-
-    def __str__(self):
-        return self.type + ' ' + str(self.binMin) + ',' + str(self.binMax) + ',' + str(self.binCount);
-
-#TODO make this something other than JUST a poly force
-class Force:
-    def __init__(self, coefficients):
-        self.coefficients = coefficients;
+class LinearHistogram:
+    def __init__(self, binCount, minimum, maximum):
+        self.binCount = binCount;
+        self.binMin = minimum;
+        self.binMax = maximum;
+        self.width = (maximum - minimum) / binCount;
 
     def __str__(self):
-        return "poly" + ' ' + ','.join(map(str, self.coefficients));
+        return ("\"linear " + str(self.binCount) + " " + str(self.binMin) + " " + str(self.binMax) + "\"");
 
-    def act(self, x):
-        value = 0;
-        for counter in range(len(self.coefficients)):
-            value += self.coefficients[counter] * (x**counter);
-        return value;
+class CustomHistogram:
+    def __init__(self, bins):
+        self.bins = bins;
+
+    def __str__(self):
+        return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
+
+#==================================================================================================================
+#TODO DOWN
+
+
 
 def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=50000, duration=60, timestep=0.05, diffusion=1, tau=1, dataDelay=20):
     print(str(index) + ":\tStarting...");
@@ -510,7 +519,7 @@ def runSimulation(index, outputPath, force, predicter, posRecorder=None, forceRe
         plt.savefig(str(outputPath) + ".png",fmt='png',dpi=1000);
         plt.close();
 
-runSimulation(0, "Results/test", Force([1, 0, 1]), FilyDensityCode([1,0,1]), Recorder("linear", -10, 10, 200));
+runSimulation(0, "Results/test", Force([1, 0, 1]), DensityPrediction([1,0,1]), Recorder("linear", -10, 10, 200));
 
 #need this in the recorders binMin, binMax, binCount!!
 #and also other stuff for the force too.
