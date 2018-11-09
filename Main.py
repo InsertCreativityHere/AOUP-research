@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from matplotlib import patches as patches
 from matplotlib import path as path
 from matplotlib import animation as animation
+import copy as cp;
 import numpy as np;
 import subprocess as sproc;
 import threading;
@@ -20,18 +21,10 @@ import matplotlib.pyplot as plt
 import copy;
 
 class DensityPredictor:
-    def __init__(self, coefficients):
-        coefficients = list(coefficients);
-        for counter in range(len(coefficients)):
-            coefficients[counter] *= counter;
-        coefficients = coefficients[1:];
-        duTemp = copy.deepcopy(coefficients);
-        self.dU_ = PolyFunc(duTemp);
-        for counter in range(len(coefficients)):
-            coefficients[counter] *= counter;
-        coefficients = coefficients[1:];
-        d2uTemp = copy.deepcopy(coefficients);
-        self.d2U_ = PolyFunc(d2uTemp);
+	def __init__(self, potential):
+		self.U_ = potential;
+		self.dU_ = self.U_.deriv();
+		self.d2U_ = self.dU_.derive();
 
     def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
         X = sp.linspace(xMin, xMax, sampleCount);
@@ -228,6 +221,8 @@ class PieceFunc:
                 raise ValueError("Bounds must be in increasing order, and no bounds can be the same.");
         self.functions = functions;
         self.bounds = bounds;
+        self.derivative = None;
+        self.integral = None;
 
     def __len__(self):
         return len(self.functions);
@@ -255,6 +250,18 @@ class PieceFunc:
         else:
             i += 1;
         return self.functions[i](x);
+
+	def deriv(self):
+        if(self.derivative == None):
+			derivatives = [func.derive() for func in self.functions];
+            self.derivative = PieceFunc(derivatives, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
+        return self.derivative;
+
+    def integ(self, C):
+        if(self.integral == None):
+			integrals = [func.integ(C) for func in self.functions];
+            self.integral = PieceFunc(integrals, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
+		return self.integral;
 
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
@@ -316,6 +323,12 @@ class DoubleWellFunc:
 
     def __str__(self_):
         return str(self.function);
+
+	def deriv(self):
+		return self.function.deriv();
+
+    def integ(self, C):
+		return self.function.integ(C);
 
 '''
 Creates a quartic polynomial function with with a specified value, 1st, 2nd, 3rd,
