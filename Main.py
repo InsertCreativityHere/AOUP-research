@@ -496,7 +496,7 @@ class CustomHistogram:
 
 #==================================================================================================================
 #TODO DOWN
-def runSimulation(index, predictor, potential, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+def runSimulation(index, potential, predictor=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     print(str(index) + ":\tInitializing...");
 
     # Create the command for running the simulation.
@@ -528,6 +528,9 @@ def runSimulation(index, predictor, potential, outputFile="./result", posRecorde
     if(noise):
         command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
+    if not(predictor):
+        predictor = DensityPredictor(potential);
+
     # Create the output directory if it doesn't exist (C++ can't export to non-existant directories)
     dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
     if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
@@ -545,15 +548,15 @@ def runSimulation(index, predictor, potential, outputFile="./result", posRecorde
         print(str(index) + ":\tGenerating prediction...");
         prediction = predictor.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
-        ax = plt.gca();
-        ax.set_ylabel("intensity");
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 100);
-        ax.plot(X, potential(X), 'r');
-        ax = ax.twinx();
+        ax = plt.gca();
         ax.set_xlabel("position");
-        ax.set_ylabel("particles");
+        ax.set_ylabel("particle density");
         ax.plot(X, prediction(X), 'g')
         ax.plot(posXY[0], posXY[1], 'b');
+        ax = ax.twinx();
+        ax.set_ylabel("potential");
+        ax.plot(X, potential(X), 'r');
 
         red = patches.Patch(color="red", label="potential");
         green = patches.Patch(color="green", label="prediction");
@@ -563,6 +566,6 @@ def runSimulation(index, predictor, potential, outputFile="./result", posRecorde
         plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=400);
         plt.close();
     if(forceRecorder):
-        pass;
+        pass;#TODO
     if(noiseRecorder):
-        pass;
+        pass;#TODO
