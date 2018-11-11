@@ -496,11 +496,11 @@ class CustomHistogram:
 
 #==================================================================================================================
 #TODO DOWN
-def runSimulation(index, predictor, force, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+def runSimulation(index, predictor, potential, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     print(str(index) + ":\tInitializing...");
 
     # Create the command for running the simulation.
-    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " " + str(force);
+    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " " + str(potential);
     if(outputFile):
         command += " -of " + str(outputFile);
     if(posRecorder):
@@ -529,12 +529,12 @@ def runSimulation(index, predictor, force, outputFile="./result", posRecorder=No
         command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
     # Create the output directory if it doesn't exist (C++ can't export to non-existant directories)
-    if not os.path.exists(outputFile):
-        os.makedirs(outputFile);
+    dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
+    if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
+        os.makedirs(outputFile[:dirIndex]);
 
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
-    print(command);
     returnVal = sproc.call(command);
     if(returnVal != 0):
         raise RuntimeError(str(index) + ":\tFailed to execute! Process returned: " + str(returnVal));
@@ -545,16 +545,23 @@ def runSimulation(index, predictor, force, outputFile="./result", posRecorder=No
         print(str(index) + ":\tGenerating prediction...");
         prediction = predictor.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
-        ax = plt();
+        ax = plt.gca();
+        ax.set_ylabel("intensity");
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 100);
-        ax.plot(X, force(X), 'r');
+        ax.plot(X, potential(X), 'r');
         ax = ax.twinx();
+        ax.set_xlabel("position");
+        ax.set_ylabel("particles");
         ax.plot(X, prediction(X), 'g')
         ax.plot(posXY[0], posXY[1], 'b');
 
-        red = patches.Patch(color="red", label="force");
+        red = patches.Patch(color="red", label="potential");
         green = patches.Patch(color="green", label="prediction");
         blue = patches.Patch(color="blue", label="result");
+        plt.legend(handles=[red, green, blue]);
+
+        plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=400);
+        plt.close();
     if(forceRecorder):
         pass;
     if(noiseRecorder):
