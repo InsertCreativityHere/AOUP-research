@@ -537,7 +537,7 @@ class CustomHistogram:
         return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
 
 #==================================================================================================================
-#TODO DOWN
+#TODO
 def runSimulation(index, potential, predictor=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     print(str(index) + ":\tInitializing...");
 
@@ -570,9 +570,6 @@ def runSimulation(index, potential, predictor=None, outputFile="./result", posRe
     if(noise):
         command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
-    if not(predictor):
-        predictor = DensityPredictor(potential);
-
     # Create the output directory if it doesn't exist (C++ can't export to non-existant directories)
     dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
     if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
@@ -583,6 +580,15 @@ def runSimulation(index, potential, predictor=None, outputFile="./result", posRe
     returnVal = sproc.call(command);
     if(returnVal != 0):
         raise RuntimeError(str(index) + ":\tFailed to execute! Process returned: " + str(returnVal));
+
+    # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
+    if(threading.current_thread() == threading.main_thread()):
+        return exportSimulation(index, potential, predictor, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
+    return 0;
+
+def exportSimulation(index, potential, predictor=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    if not(predictor):
+        predictor = DensityPredictor(potential);
 
     # Export the results.
     print(str(index) + ":\tExporting results...");
@@ -611,3 +617,5 @@ def runSimulation(index, potential, predictor=None, outputFile="./result", posRe
         pass;#TODO
     if(noiseRecorder):
         pass;#TODO
+
+    return 1;
