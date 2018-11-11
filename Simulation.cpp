@@ -111,7 +111,7 @@ void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histog
 }
 
 /**TODO THIS IS INNACURATE AND NOT WELL WRITTEN
- * Generates a force from a stringified representation.
+ * Generates a force from a stringified representation OF A POTENTIAL!!!!
  * @param str The stringified representation of a force structured as follows: "<type> [ param1 param2 ... ]". The extra spaces matter ALOT.
  *            type is the type of the force, and what follows is a space delimited sequence of force specific parameters, there are currently 3 types of forces.abort
  *            - Linear (deprecated, should remove this at some point...)
@@ -133,8 +133,12 @@ force::Force* createForce(const std::string& str)
 
     if(paramVector[0] == "poly")
     {
-        std::vector<double> coeffecients(paramVector.size() - 1);
-        std::transform(++paramVector.begin(), paramVector.end(), std::back_inserter(coeffecients), [](const std::string& str) {return std::stod(str);});
+        std::vector<double> coeffecients(paramVector.size() - 2);
+        std::transform((paramVector.begin() + 2), paramVector.end(), std::back_inserter(coeffecients), [](const std::string& str) {return std::stod(str);});
+        for(int i = 0; i < coeffecients.size(); i++)
+        {
+            coeffecients[i] *= -(i + 1);
+        }
         return new force::PolyForce(coeffecients);
     } else
     if(paramVector[0] == "piece")
