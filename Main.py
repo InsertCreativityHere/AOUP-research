@@ -262,6 +262,48 @@ class PieceFunc:
             self.integral = PieceFunc(integrals, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
         return self.integral;
 
+'''WRITE BETTER DIRECTIONS TODO
+each parameter is [x, f(x), f'(x), f''(x)],
+then all of these go together in a list.'''
+class DoubleWellFunc():
+    def __init__(self, A, B, C, D, E):
+        pass;#TODO
+
+#                        ax, ay, ady, ad2y, bx, by, bdy, bd2y
+def create2ndOrderSpline(a, b, A, B, S, T, U, V):
+    delta1 = b-a;
+    delta2 = delta1**2;
+    delta3 = delta1**3;
+    # Compute the parameterization coeffecients.
+    D = (a*U) - (((A*delta1) - ((7*a) - b)*((S*delta1) + (2*A))) / delta2);
+    G = (b*V) + (((B*delta1) - ((7*b) - a)*((T*delta1) - (2*B))) / delta2);
+    E = U + ((6 * ((S*delta1) + (2*A))) / delta2);
+    H = V - ((6 * ((T*delta1) - (2*B))) / delta2);
+
+    print(D);
+    print(G);
+    print(E);
+    print(H);
+    # Create the intermediate splining values.
+    i1 = E / 2;
+    j1 = H / 2;
+    i3 = -(i1 * (a**2)) + (D * a) + A;
+    j3 = -(j1 * (b**2)) + (G * b) + B;
+
+    print(i1);
+    print(j1);
+    print(i3);
+    print(j3);
+    # Construct the spline polynomial.
+    c0 = -(-((b**3) * i3) + ((a**3) * j3)) / delta3;
+    c1 = (-((b**3) * D) + ((a**3) * G) - (3 * (b**2) * i3) + (3 * (a**2) * j3)) / delta3;
+    c2 = -(-((b**3) * i1) + ((a**3) * j1) - (3 * (b**2) * D) + (3 * (a**2) * G) - (3 * b * i3) + (3 * a * j3)) / delta3;
+    c3 = (-(3 * (b**2) * i1) + (3 * (a**2) * j1) - (3 * b * D) + (3 * a * G) - i3 + j3) / delta3;
+    c4 = -(-(3 * b * i1) + (3 * a * j1) - D + G) / delta3;
+    c5 = (-i1 + j1) / delta3;
+    # Return a 5th order polynomial spline.
+    return PolyFunc((c0, c1, c2, c3, c4, c5));
+
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
 are specified, and afterwards it's callable as any normal function.
