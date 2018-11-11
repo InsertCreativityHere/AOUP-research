@@ -5,26 +5,24 @@ from matplotlib import path as path
 from matplotlib import animation as animation
 import copy as cp;
 import numpy as np;
+import scipy as sp;
 import subprocess as sproc;
 import threading;
 
 #==================================================================================================================
-# Fily's code for generating prediction curves. Initialize it with the coeffecients of the potential polynomial,
-# Then generate predictions for specific scenarios by calling 'generateProfile'.
+# Code for generating prediction curves. Initialize it with the external force, then generate predictions
+# for specific scenarios by calling 'generateProfile'.
 
-import scipy as sp
-#from scipy.optimize import brentq
 from scipy.special import erfi
 import scipy.linalg
 import itertools as itt
-import matplotlib.pyplot as plt
 import copy;
 
 class DensityPredictor:
-	def __init__(self, potential):
-		self.U_ = potential;
-		self.dU_ = self.U_.deriv();
-		self.d2U_ = self.dU_.derive();
+    def __init__(self, potential):
+        self.U_ = potential;
+        self.dU_ = self.U_.deriv();
+        self.d2U_ = self.dU_.deriv();
 
     def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
         X = sp.linspace(xMin, xMax, sampleCount);
@@ -192,7 +190,7 @@ class PolyFunc:
         return ("\"poly" + str(self.c)[1:-1] + "\"");
 
     def __call__(self, x):
-        return np.dot(self.c, np.power(x, np.arange(len(self))));
+        return np.sum(np.multiply(self.c, np.power(x[:, None], np.arange(len(self)))), axis=1);
 
     def deriv(self):
         if(self.derivative == None):
@@ -251,17 +249,17 @@ class PieceFunc:
             i += 1;
         return self.functions[i](x);
 
-	def deriv(self):
+    def deriv(self):
         if(self.derivative == None):
-			derivatives = [func.derive() for func in self.functions];
+            derivatives = [func.derive() for func in self.functions];
             self.derivative = PieceFunc(derivatives, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
         return self.derivative;
 
     def integ(self, C):
         if(self.integral == None):
-			integrals = [func.integ(C) for func in self.functions];
+            integrals = [func.integ(C) for func in self.functions];
             self.integral = PieceFunc(integrals, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
-		return self.integral;
+        return self.integral;
 
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
@@ -324,11 +322,11 @@ class DoubleWellFunc:
     def __str__(self_):
         return str(self.function);
 
-	def deriv(self):
-		return self.function.deriv();
+    def deriv(self):
+        return self.function.deriv();
 
     def integ(self, C):
-		return self.function.integ(C);
+        return self.function.integ(C);
 
 '''
 Creates a quartic polynomial function with with a specified value, 1st, 2nd, 3rd,
@@ -497,7 +495,7 @@ class CustomHistogram:
 
 #==================================================================================================================
 #TODO DOWN
-def runSimulation(index, force, outputFile=None, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=None, memory=None, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+def runSimulation(index, predictor, force, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     print(str(index) + ":\tInitializing...");
 
     # Create the command for running the simulation.
@@ -539,7 +537,18 @@ def runSimulation(index, force, outputFile=None, posRecorder=None, forceRecorder
     print(str(index) + ":\tExporting results...");
     if(posRecorder):
         print(str(index) + ":\tGenerating prediction...");
-        #TODO
+        prediction = predictor.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
+        posXY = Histogram(str(outputFile) + ".pos").interpolate();
+        ax = plt();
+        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 100);
+        ax.plot(X, force(X), 'r');
+        ax = ax.twinx();
+        ax.plot(X, prediction(X), 'g')
+        ax.plot(posXY[0], posXY[1], 'b');
+
+        red = patches.Patch(color="red", label="force");
+        green = patches.Patch(color="green", label="prediction");
+        blue = patches.Patch(color="blue", label="result");
     if(forceRecorder):
         pass;
     if(noiseRecorder):
