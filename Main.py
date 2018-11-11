@@ -7,6 +7,7 @@ import copy as cp;
 import numpy as np;
 import scipy as sp;
 import subprocess as sproc;
+import os;
 import threading;
 
 #==================================================================================================================
@@ -187,7 +188,7 @@ class PolyFunc:
         return len(self.c);
 
     def __str__(self):
-        return ("\"poly" + str(self.c)[1:-1] + "\"");
+        return ("\"poly " + str(self.c)[1:-1] + "\"");
 
     def __call__(self, x):
         return np.sum(np.multiply(self.c, np.power(x[:, None], np.arange(len(self)))), axis=1);
@@ -501,7 +502,7 @@ def runSimulation(index, predictor, force, outputFile="./result", posRecorder=No
     # Create the command for running the simulation.
     command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " " + str(force);
     if(outputFile):
-        command += " -of " + str(outputfile);
+        command += " -of " + str(outputFile);
     if(posRecorder):
         command += " -pr " + str(posRecorder);
     if(forceRecorder):
@@ -527,11 +528,16 @@ def runSimulation(index, predictor, force, outputFile="./result", posRecorder=No
     if(noise):
         command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
+    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories)
+    if not os.path.exists(outputFile):
+        os.makedirs(outputFile);
+
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
+    print(command);
     returnVal = sproc.call(command);
     if(returnVal != 0):
-        raise (str(tau) + ":\tFailed to execute! Process returned: " + str(returnVal));
+        raise RuntimeError(str(index) + ":\tFailed to execute! Process returned: " + str(returnVal));
 
     # Export the results.
     print(str(index) + ":\tExporting results...");

@@ -134,7 +134,7 @@ force::Force* createForce(const std::string& str)
     if(paramVector[0] == "poly")
     {
         std::vector<double> coeffecients(paramVector.size() - 2);
-        std::transform((paramVector.begin() + 2), paramVector.end(), std::back_inserter(coeffecients), [](const std::string& str) {return std::stod(str);});
+        std::transform((paramVector.begin() + 2), paramVector.end(), coeffecients.begin(), [](const std::string& str) {return std::stod(str);});
         for(int i = 0; i < coeffecients.size(); i++)
         {
             coeffecients[i] *= -(i + 1);
@@ -189,7 +189,7 @@ histogram::Recorder* createRecorder(const std::string& str)
     if(paramVector[0] == "custom")
     {
         std::vector<double> bins(paramVector.size() - 1);
-        std::transform(++paramVector.begin(), paramVector.end(), std::back_inserter(bins), [](const std::string& str) {return std::stod(str);});
+        std::transform(++paramVector.begin(), paramVector.end(), bins.begin(), [](const std::string& str) {return std::stod(str);});
         histogram::Histogram* histo = new histogram::CustomHistogram(bins);
         return new histogram::Recorder(*histo);
     } else{
@@ -200,112 +200,119 @@ histogram::Recorder* createRecorder(const std::string& str)
 //TODO write something here!
 int main(int argc, char* argv[])
 {
-    // Convert char arrays to lowercase strings for parsing.
-    std::string args[argc];
-    for(int i = 0; i < argc; i++)
+    try
     {
-        args[i] = std::string(argv[i]);
-        std::transform(args[i].begin(), args[i].end(), args[i].begin(), tolower);
-    }
-
-    // Generate the force.
-    force::Force* force = createForce(args[1]);
-
-    // Assign default values for everything else
-    std::string outputFile = "./results";
-    histogram::Recorder* posRecorder = NULL;
-    histogram::Recorder* forceRecorder = NULL;
-    histogram::Recorder* noiseRecorder = NULL;
-    unsigned long particleCount = 100;
-    double duration = 20;
-    double timestep = 0.05;
-    double diffusion = 1;
-    double memory = 1;
-    unsigned long dataDelay = 10;
-    double startBoundLeft = -5;
-    double startBoundRight = 5;
-    double activeForcesMean = 0;
-    double activeForcesStddev = 0.2;
-    double noiseMean = 0;
-    double noiseStddev = 1;
-
-    for(int i = 2; i < argc; i++)
-    {
-        if(args[i] == "-of")
+        // Convert char arrays to lowercase strings for parsing.
+        std::string args[argc];
+        for(int i = 0; i < argc; i++)
         {
-            outputFile = args[++i];
+            args[i] = std::string(argv[i]);
+            std::transform(args[i].begin(), args[i].end(), args[i].begin(), tolower);
         }
-        if(args[i] == "-pr")
+
+        // Generate the force.
+        force::Force* force = createForce(args[1]);
+
+        // Assign default values for everything else
+        std::string outputFile = "./results";
+        histogram::Recorder* posRecorder = NULL;
+        histogram::Recorder* forceRecorder = NULL;
+        histogram::Recorder* noiseRecorder = NULL;
+        unsigned long particleCount = 100;
+        double duration = 20;
+        double timestep = 0.05;
+        double diffusion = 1;
+        double memory = 1;
+        unsigned long dataDelay = 10;
+        double startBoundLeft = -5;
+        double startBoundRight = 5;
+        double activeForcesMean = 0;
+        double activeForcesStddev = 0.2;
+        double noiseMean = 0;
+        double noiseStddev = 1;
+
+        for(int i = 2; i < argc; i++)
         {
-            posRecorder = createRecorder(args[++i]);
-        } else
-        if(args[i] == "-fr")
-        {
-            forceRecorder = createRecorder(args[++i]);
-        } else
-        if(args[i] == "-nr")
-        {
-            noiseRecorder = createRecorder(args[++i]);
-        } else
-        if(args[i] == "-n")
-        {
-            particleCount = std::stoul(args[++i]);
-        } else
-        if(args[i] == "-t")
-        {
-            duration = std::stod(args[++i]);
-        } else
-        if(args[i] == "-dt")
-        {
-            timestep = std::stod(args[++i]);;
-        } else
-        if(args[i] == "-d")
-        {
-            diffusion = std::stod(args[++i]);
-        } else
-        if(args[i] == "-m")
-        {
-            memory = std::stod(args[++i]);
-        } else
-        if(args[i] == "-dd")
-        {
-            dataDelay = std::stoul(args[++i]);
-        } else
-        if(args[i] == "-sb")
-        {
-            startBoundLeft = std::stod(args[i+1]);
-            startBoundRight = std::stod(args[i+2]);
-            i += 2;
-        } else
-        if(args[i] == "-af")
-        {
-            activeForcesMean = std::stod(args[i+1]);
-            activeForcesStddev = std::stod(args[i+2]);
-            i += 2;
-        } else
-        if(args[i] == "-no")
-        {
-            noiseMean = std::stod(args[i+1]);
-            noiseStddev = std::stod(args[i+2]);
-            i += 2;
-        } else{
-            std::cout << "Skipping unknown parameter: " + args[i];
+            if(args[i] == "-of")
+            {
+                outputFile = args[++i];
+            } else
+            if(args[i] == "-pr")
+            {
+                posRecorder = createRecorder(args[++i]);
+            } else
+            if(args[i] == "-fr")
+            {
+                forceRecorder = createRecorder(args[++i]);
+            } else
+            if(args[i] == "-nr")
+            {
+                noiseRecorder = createRecorder(args[++i]);
+            } else
+            if(args[i] == "-n")
+            {
+                particleCount = std::stoul(args[++i]);
+            } else
+            if(args[i] == "-t")
+            {
+                duration = std::stod(args[++i]);
+            } else
+            if(args[i] == "-dt")
+            {
+                timestep = std::stod(args[++i]);;
+            } else
+            if(args[i] == "-d")
+            {
+                diffusion = std::stod(args[++i]);
+            } else
+            if(args[i] == "-m")
+            {
+                memory = std::stod(args[++i]);
+            } else
+            if(args[i] == "-dd")
+            {
+                dataDelay = std::stoul(args[++i]);
+            } else
+            if(args[i] == "-sb")
+            {
+                startBoundLeft = std::stod(args[i+1]);
+                startBoundRight = std::stod(args[i+2]);
+                i += 2;
+            } else
+            if(args[i] == "-af")
+            {
+                activeForcesMean = std::stod(args[i+1]);
+                activeForcesStddev = std::stod(args[i+2]);
+                i += 2;
+            } else
+            if(args[i] == "-no")
+            {
+                noiseMean = std::stod(args[i+1]);
+                noiseStddev = std::stod(args[i+2]);
+                i += 2;
+            } else{
+                std::cerr << "Skipping unknown parameter: " + args[i];
+            }
         }
-    }
 
-    runSimulation(force, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBoundLeft, startBoundRight, activeForcesMean, activeForcesStddev, noiseMean, noiseStddev);
+        runSimulation(force, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBoundLeft, startBoundRight, activeForcesMean, activeForcesStddev, noiseMean, noiseStddev);
 
-    if(posRecorder)
+        if(posRecorder)
+        {
+            posRecorder->writeData(outputFile + ".pos");
+        }
+        if(forceRecorder)
+        {
+            forceRecorder->writeData(outputFile + ".force");
+        }
+        if(noiseRecorder)
+        {
+            noiseRecorder->writeData(outputFile + ".noise");
+        }
+        return 0;
+    } catch(const std::exception& ex)
     {
-        posRecorder->writeData(outputFile + ".pos");
-    }
-    if(forceRecorder)
-    {
-        forceRecorder->writeData(outputFile + ".force");
-    }
-    if(noiseRecorder)
-    {
-        noiseRecorder->writeData(outputFile + ".noise");
+        std::cerr << ex.what() << std::endl;
     }
 }
 
