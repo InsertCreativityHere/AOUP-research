@@ -278,13 +278,17 @@ class PieceFunc:
 each parameter is [x, f(x), f'(x), f''(x)],
 then all of these go together in a list.'''
 class PiecewiseCustom2ndOrder:
-    def __init__(self, points):
+    def __init__(self, points, check=False):
         splines = [];
-        splines.append(create1Way2ndOrderSpline(*points[0]));
+        splines.append(create1Way2ndOrderSpline(*points[0]), check);
         for i in range(len(points) - 1):
-            splines.append(create2Way2ndOrderSpline(*points[i], *points[i+1]));
-        splines.append(create1Way2ndOrderSpline(*points[-1]));
-        self.function = PieceFunc(splines, list(zip(*points))[0]);
+            splines.append(create2Way2ndOrderSpline(*points[i], *points[i+1]), check);
+        splines.append(create1Way2ndOrderSpline(*points[-1]), check);
+        self.function = PieceFunc(list(zip(*splines))[0], list(zip(*points))[0]);
+        if(check):
+            for i in range(len(list(zip(*splines))[1])):
+                if(splines[i][1]):
+                    print("Instability present on spline component " + str(i) + "!");
 
     def __call__(self, x):
         return self.function(x);
@@ -328,7 +332,7 @@ def create2Way2ndOrderSpline(a, A, S, U, b, B, T, V, check=False):
         roots = np.roots(np.array([5*c5, 4*c4, 3*c3, 2*c2, c1]));
         return (PolyFunc((c0, c1, c2, c3, c4, c5)), (len(np.where((roots > a) & (roots < b))[0]) == 0));
     else:
-        return (PolyFunc((c0, c1, c2, c3, c4, c5));
+        return (PolyFunc((c0, c1, c2, c3, c4, c5)), True);
 
 #                            ax, ay, ady, ad2y, direction: false-left, true-right
 def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=False):
@@ -349,7 +353,7 @@ def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=False):
         else:
             return (PolyFunc((c0, c1, c2)), (len(np.where(roots < a)[0]) == 0));
     else:
-        return PolyFunc((c0, c1, c2));
+        return (PolyFunc((c0, c1, c2)), True);
 
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
