@@ -277,12 +277,29 @@ class PieceFunc:
 '''WRITE BETTER DIRECTIONS TODO
 each parameter is [x, f(x), f'(x), f''(x)],
 then all of these go together in a list.'''
-class DoubleWellFunc():
-    def __init__(self, A, B, C, D, E):
-        pass;#TODO
+class PiecewiseCustom2ndOrder:
+    def __init__(self, points):
+        splines = [];
+        splines.append(create1Way2ndOrderSpline(*points[0]));
+        for i in range(len(points) - 1):
+            splines.append(create2Way2ndOrderSpline(*points[i], *points[i+1]));
+        splines.append(create1Way2ndOrderSpline(*points[-1]));
+        self.function = PieceFunc(splines, list(zip(*points))[0]);
 
-#                        ax, ay, ady, ad2y, bx, by, bdy, bd2y
-def create2ndOrderSpline(a, b, A, B, S, T, U, V):
+    def __call__(self, x):
+        return self.function(x);
+
+    def __str__(self_):
+        return str(self.function);
+
+    def deriv(self):
+        return self.function.deriv();
+
+    def integ(self, C):
+        return self.function.integ(C);
+
+#                            ax, ay, ady, ad2y, bx, by, bdy, bd2y
+def create2Way2ndOrderSpline(a, A, S, U, b, B, T, V, check=False):
     delta1 = b-a;
     delta2 = delta1**2;
     delta3 = delta1**3;
@@ -292,20 +309,12 @@ def create2ndOrderSpline(a, b, A, B, S, T, U, V):
     E = U + ((6 * ((S*delta1) + (2*A))) / delta2);
     H = V - ((6 * ((T*delta1) - (2*B))) / delta2);
 
-    print(D);
-    print(G);
-    print(E);
-    print(H);
     # Create the intermediate splining values.
     i1 = E / 2;
     j1 = H / 2;
     i3 = -(i1 * (a**2)) + (D * a) + A;
     j3 = -(j1 * (b**2)) + (G * b) + B;
 
-    print(i1);
-    print(j1);
-    print(i3);
-    print(j3);
     # Construct the spline polynomial.
     c0 = -(-((b**3) * i3) + ((a**3) * j3)) / delta3;
     c1 = (-((b**3) * D) + ((a**3) * G) - (3 * (b**2) * i3) + (3 * (a**2) * j3)) / delta3;
@@ -314,7 +323,33 @@ def create2ndOrderSpline(a, b, A, B, S, T, U, V):
     c4 = -(-(3 * b * i1) + (3 * a * j1) - D + G) / delta3;
     c5 = (-i1 + j1) / delta3;
     # Return a 5th order polynomial spline.
-    return PolyFunc((c0, c1, c2, c3, c4, c5));
+    if(check):
+        # Ensure there's no spurious extrema.
+        roots = np.roots(np.array([5*c5, 4*c4, 3*c3, 2*c2, c1]));
+        return (PolyFunc((c0, c1, c2, c3, c4, c5)), (len(np.where((roots > a) & (roots < b))[0]) == 0));
+    else:
+        return (PolyFunc((c0, c1, c2, c3, c4, c5));
+
+#                            ax, ay, ady, ad2y, direction: false-left, true-right
+def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=False):
+    # Create the intermediate splining values.
+    i1 = U / 2;
+    i2 = S - (a * U);
+
+    # Construct the spline polynomial.
+    c0 = -(i1 * (a**2)) - (i2 * a) + A;
+    c1 = i2;
+    c2 = i1;
+    # Return a 2nd order polynomial spline.
+    if(check):
+        # Ensure there's no spurious extrema.
+        roots = np.roots(np.array([U, c1]));
+        if(direction):
+            return (PolyFunc((c0, c1, c2)), (len(np.where(roots > a)[0]) == 0));
+        else:
+            return (PolyFunc((c0, c1, c2)), (len(np.where(roots < a)[0]) == 0));
+    else:
+        return PolyFunc((c0, c1, c2));
 
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
