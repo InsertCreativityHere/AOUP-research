@@ -259,7 +259,9 @@ class PieceFunc:
         return s;
 
     def __call__(self, x):
-        return np.piecewise(x, [(((x>self.bounds[i-1]) if (self.directions[i-1]) else (x>=self.bounds[i-1])) if (i==len(self.bounds)) else ((x<self.bounds[i]) if (self.directions[i]) else (x<=self.bounds[i]))) for i in range(len(self.bounds)+1)], self.functions);
+        fTEMP = list(cp.deepcopy(self.functions));
+        fTEMP.append(fTEMP.pop(0));
+        return np.piecewise(x, [((x >= self.bounds[i]) if (self.directions[i]) else (x > self.bounds[i])) for i in range(len(self.bounds))], fTEMP);
 
     def deriv(self):
         if(self.derivative == None):
