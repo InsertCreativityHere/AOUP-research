@@ -203,6 +203,8 @@ class PolyFunc:
         return ("\"poly " + str(self.c)[1:-1] + "\"");
 
     def __call__(self, x):
+        if((type(x) != np.ndarray) or (x.ndim == 0)):
+            x = np.array([x]);
         return np.sum(np.multiply(self.c, np.power(x[:, None], np.arange(len(self)))), axis=1);
 
     def deriv(self):
@@ -234,6 +236,10 @@ class PieceFunc:
         self.bounds = bounds;
         self.derivative = None;
         self.integral = None;
+        if(directions):
+            self.directions = directions;
+        else:
+            self.directions = [False]*len(bounds);
 
     def __len__(self):
         return len(self.functions);
@@ -245,22 +251,15 @@ class PieceFunc:
         s = "\"piece ";
         for i in range(len(self.bounds)):
             s += "\'" + str(self.functions[i]) + "\' " + str(self.bounds[i]) + " "
-            if((self.directions == None) or not directions[i]):
-                s += "0 ";
-            else:
+            if(self.directions[i]):
                 s += "1 ";
+            else:
+                s += "0 ";
         s += "\'" + str(self.functions[-1]) + "\'\"";
         return s;
 
     def __call__(self, x):
-        for i in range(len(self.bounds)):
-            if(x <= self.bounds[i]):
-                if((x == self.bounds[i]) and (directions != None) and (directions[i])):
-                    i += 1;
-                break;
-        else:
-            i += 1;
-        return self.functions[i](x);
+        return np.piecewise(x, [(((x>self.bounds[i-1]) if (self.directions[i-1]) else (x>=self.bounds[i-1])) if (i==len(self.bounds)) else ((x<self.bounds[i]) if (self.directions[i]) else (x<=self.bounds[i]))) for i in range(len(self.bounds)+1)], self.functions);
 
     def deriv(self):
         if(self.derivative == None):
@@ -280,10 +279,10 @@ then all of these go together in a list.'''
 class PiecewiseCustom2ndOrder:
     def __init__(self, points, check=False):
         splines = [];
-        splines.append(create1Way2ndOrderSpline(*points[0]), check);
+        splines.append(create1Way2ndOrderSpline(*points[0], check));
         for i in range(len(points) - 1):
-            splines.append(create2Way2ndOrderSpline(*points[i], *points[i+1]), check);
-        splines.append(create1Way2ndOrderSpline(*points[-1]), check);
+            splines.append(create2Way2ndOrderSpline(*points[i], *points[i+1], check));
+        splines.append(create1Way2ndOrderSpline(*points[-1], check));
         self.function = PieceFunc(list(zip(*splines))[0], list(zip(*points))[0]);
         if(check):
             for i in range(len(list(zip(*splines))[1])):
