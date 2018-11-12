@@ -19,7 +19,7 @@ import scipy.linalg
 import itertools as itt
 import copy;
 
-class DensityPredictor:
+class PersistentDensityPredictor:
     def __init__(self, potential):
         self.U_ = potential;
         self.dU_ = self.U_.deriv();
@@ -100,6 +100,18 @@ class DensityPredictor:
     def p(self, x, tau, diffusion, E, bins, vals):
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*self.q0*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
+
+class ThermalDensityPredictor:
+    def __init__(self, potential):
+        self.potential = potential;
+
+    def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
+        dx = ((xMax - xMin) / (sampleCount*100));
+        normalization = np.sum(self.p(np.arange(xMin, xMax, dx), diffusion, 1)) * dx;
+        return lambda x: self.p(x, diffusion, normalization);
+
+    def p(self, x, diffusion, normalization):
+        return np.exp(-(self.potential(x)) / diffusion) / normalization;
 
 #==================================================================================================================
 # Utilities for recording and visualing collected data
@@ -538,7 +550,7 @@ class CustomHistogram:
 
 #==================================================================================================================
 #TODO
-def runSimulation(index, potential, predictor=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     print(str(index) + ":\tInitializing...");
 
     # Create the command for running the simulation.
@@ -586,30 +598,35 @@ def runSimulation(index, potential, predictor=None, outputFile="./result", posRe
         return exportSimulation(index, potential, predictor, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
     return 0;
 
-def exportSimulation(index, potential, predictor=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    if not(predictor):
-        predictor = DensityPredictor(potential);
-
+def exportSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     # Export the results.
     print(str(index) + ":\tExporting results...");
     if(posRecorder):
         print(str(index) + ":\tGenerating prediction...");
-        prediction = predictor.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
+        if not(predictorT):
+            predictorT = ThermalDensityPredictor(potential);
+        if not(predictorP):
+            predictorP = PersistentDensityPredictor(potential);
+
+        predictionT = predictorT.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
+        predictionP = predictorP.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 100);
         ax = plt.gca();
         ax.set_xlabel("position");
         ax.set_ylabel("particle density");
-        ax.plot(X, prediction(X), 'g')
-        ax.plot(posXY[0], posXY[1], 'b');
+        ax.plot(X, predictionT(X), "green");
+        ax.plot(X, predictionP(X), "blue");
+        ax.plot(posXY[0], posXY[1], "red");
         ax = ax.twinx();
         ax.set_ylabel("potential");
-        ax.plot(X, potential(X), 'r');
+        ax.plot(X, potential(X), "black");
 
-        red = patches.Patch(color="red", label="potential");
-        green = patches.Patch(color="green", label="prediction");
-        blue = patches.Patch(color="blue", label="result");
-        plt.legend(handles=[red, green, blue]);
+        black = patches.Patch(color="black", label="potential");
+        green = patches.Patch(color="green", label="thermal");
+        blue = patches.Patch(color="blue", label="persistent");
+        red = patches.Patch(color="red", label="result");
+        plt.legend(handles=[black, green, blue, red], loc=1);
 
         plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=400);
         plt.close();
