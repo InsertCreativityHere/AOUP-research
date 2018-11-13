@@ -17,7 +17,6 @@ import threading;
 from scipy.special import erfi
 import scipy.linalg
 import itertools as itt
-import copy;
 
 class PersistentDensityPredictor:
     def __init__(self, potential):
@@ -200,7 +199,7 @@ class PolyFunc:
         return len(self.c);
 
     def __str__(self):
-        return ("\"poly " + str(self.c)[1:-1] + "\"");
+        return ("poly " + str(self.c)[1:-1]);
 
     def __call__(self, x):
         if((type(x) != np.ndarray) or (x.ndim == 0)):
@@ -248,14 +247,14 @@ class PieceFunc:
         return self.functions[index];
 
     def __str__(self):
-        s = "\"piece ";
+        s = "piece ";
         for i in range(len(self.bounds)):
             s += "\'" + str(self.functions[i]) + "\' " + str(self.bounds[i]) + " "
             if(self.directions[i]):
                 s += "1 ";
             else:
                 s += "0 ";
-        s += "\'" + str(self.functions[-1]) + "\'\"";
+        s += "\'" + str(self.functions[-1]) + "\'";
         return s;
 
     def __call__(self, x):
@@ -265,7 +264,7 @@ class PieceFunc:
 
     def deriv(self):
         if(self.derivative == None):
-            derivatives = [func.derive() for func in self.functions];
+            derivatives = [func.deriv() for func in self.functions];
             self.derivative = PieceFunc(derivatives, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
         return self.derivative;
 
@@ -294,7 +293,7 @@ class PiecewiseCustom2ndOrder:
     def __call__(self, x):
         return self.function(x);
 
-    def __str__(self_):
+    def __str__(self):
         return str(self.function);
 
     def deriv(self):
@@ -594,7 +593,7 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
     print(str(index) + ":\tInitializing...");
 
     # Create the command for running the simulation.
-    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " " + str(potential);
+    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " \"" + str(potential) + "\"";
     if(outputFile):
         command += " -of " + str(outputFile);
     if(posRecorder):
@@ -622,10 +621,11 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
     if(noise):
         command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
-    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories)
-    dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
-    if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
-        os.makedirs(outputFile[:dirIndex]);
+    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories) (ONLY IF IT'S NOT IN PARALLEL)
+    if(threading.current_thread() == threading.main_thread()):
+        dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
+        if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
+            os.makedirs(outputFile[:dirIndex]);
 
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
