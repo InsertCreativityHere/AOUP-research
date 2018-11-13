@@ -144,16 +144,17 @@ force::Force* createForce(const std::string& str)
     if(paramVector[0] == "piece")
     {
         int size = (paramVector.size() - 1) / 3;
-        std::vector<force::Force*> forces(size);
+        std::vector<force::Force*> forces(size + 1);
         std::vector<double> bounds(size);
         std::vector<bool> directions(size);
 
         for(int i = 0; i < size; i++)
         {
-            forces[i] = createForce(paramVector[3 * i]);
-            bounds[i] = std::stod(paramVector[(3 * i) + 1]);
-            directions[i] = !!std::stoi(paramVector[(3 * i) + 2]);
+            forces[i] = createForce(paramVector[(3 * i) + 1]);
+            bounds[i] = std::stod(paramVector[(3 * i) + 2]);
+            directions[i] = !!std::stoi(paramVector[(3 * i) + 3]);
         }
+        forces[size] = createForce(paramVector[paramVector.size() - 1]);
 
         return new force::PieceForce(forces, bounds, directions);
     } else{
