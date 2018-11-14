@@ -73,7 +73,7 @@ namespace force
         int i = 0;
         for(; i < bounds.size(); i++)
         {
-            if(bounds[i] <= position)
+            if(bounds[i] >= position)
             {
                 if((bounds[i] == position) && (directions[i]))
                 {
