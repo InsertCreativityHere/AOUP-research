@@ -28,28 +28,57 @@ class ThermalDensityPredictor:
 
     '''Generates the prediction profile as a normalized density.
        @param index: The index of the simulation, for logging purposes, this should be an integer, but can actually be anything.
-       @param tau: The memory constant being used in the simulation. This actually has no bearing in the thermal limit, and is only
-                   included for compatability purposes, so that all calls to generateProfile look identicial.
        @param diffusion: The diffusion constant being used in the simulation.
        @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
        @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
        @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)
        @returns: A function specifying the predicted density of particles at every position.'''
-    def generateProfile(self, index, tau, diffusion, xMin=-1000, xMax=1000, dx=0.001):
+    def generateProfile(self, index, diffusion, xMin=-1000, xMax=1000, dx=0.001):
         # Compute the normalization constant by integrating the un-normalized density with the trapezoidal algorithm.
         Y = self.p(np.arange(xMin, xMax, dx), diffusion, 1);
         normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * dx);
         # Return the normalized density function.
-        return lambda x: self.p(x, diffusion, normalization);
+        return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
 
-    '''The actual particle distribution density function. The actual prediction functions this class generates are this function,
-       wrapped in lambda functions for each specific case of potential and simulation constants.
-       @param x: The position to evaluate the density at. This is the only parameter unwrapped in the internal lambda.
-       @param diffusion: The diffusion constant being used in the simulation.
-       @param normalization: The normalization constant to ensure this is a normalized density distribution.
-       @returns: The normalized predicted density value at the specified location given the diffusion present.'''
-    def p(self, x, diffusion, normalization):
-        return np.exp(-(self.potential(x)) / diffusion) / normalization;
+'''
+Generates the predicted density profile for a system in the persistent limit (ie.  memory >> diffusion), for double well potentials.
+'''
+class DoubleWellPersistentDensityPredictor:
+    '''POTENTIAL MUST BE PIECEWISE, MADE OF POLYNOMIALS AND MUST BE MIN, MAX, MIN!!!!!!!!'''#TODO COMMENTS
+    def __init__(self, potential):
+        self.dU = potential.derive();
+        self.d2U = self.dU.derive();
+        self.B = self.dU.bounds[1];
+        self.C = self.dU.bounds[3];
+        # Find the points that match the slopes at the inflection points.
+        self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
+        self.D = (self.dU(self.B) - self.dU.functions[5].c[0]) / self.dU.functions[5].c[1];
+
+    def generateProfile(self, index, memory, diffusion, dx=0.001):#TODO COMMENTS
+        # Pre-compute some constants.
+        c0 = memory / (2 * diffusion);
+        c1 = np.sqrt(memory / (2 * np.pi * diffusion));
+        # Compute the normalization integrals.
+        Z1 = -i(self.A, self.B, c0, dx);
+        Z2 = i(self.C, self.D, c0, dx);
+
+        # Create a function for generating the steady state distribution of a normal convex potential.
+        p0 = lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
+
+        # Create a list for storing the piecewise functions that comprise the prediction.
+        functions = [];
+        functions.append(p0);
+        functions.append(lambda x: (p0(x) * -i(x, self.B, c0, dx)));
+        functions.append(lambda x: (p0(x) * 0));
+        functions.append(lambda x: (p0(x) * i(self.C, x, c0, dx)));
+        functions.append(p0);
+
+        # Return the piecewise density function. TODO IS THIS ALREADY NORMALIZED??
+        return lambda x: np.piecewise(x, [(x < self.A), (x >= self.A), (x >= self.B), (x >= self.C), (x >= self.D)], functions);
+
+    def i(xMin, xMax, c, dx, Z=1):#TODO COMMENTS
+        Y = np.exp(c * self.dU(np.arange(xMin, xMax, dx))**2);
+        return (np.sum((Y[1:] + Y[:-1]) / 2) * dx) / Z;
 
 #TODO CHECK THIS THING, IT'S PROBABLY BROKEN, ALSO COMMENTS
 from scipy.special import erfi
@@ -313,7 +342,7 @@ class PieceFunc:
 
     def __call__(self, x):
         fTEMP = list(cp.deepcopy(self.functions));
-        fTEMP.append(fTEMP.pop(0));
+        fTEMP.append(fTEMP.pop(0));#TODO FIX THIS BETTER INSTEAD OF COPYING THE THING EVERY TIME. THE ISSUE IS PIECEWISE EVALUATES BACKWARDS.
         return np.piecewise(x, [((x >= self.bounds[i]) if (self.directions[i]) else (x > self.bounds[i])) for i in range(len(self.bounds))], fTEMP);
 
     def deriv(self):
