@@ -642,7 +642,7 @@ def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
 '''
 Class for specifying the parameters of a linear histogram.
 '''
-class LinearHistogram:#TODO REWORK THIS TO PASS DX TO THE SIMULATION INSTEAD OF A LAME BIN COUNT.
+class LinearHistogram:
     '''Creates a new linear histogram with the specified parameters.
        @param minimum: The minimum value of data the histogram should track.
        @param maximum: The maximum value of data the histogram should track.
@@ -654,16 +654,16 @@ class LinearHistogram:#TODO REWORK THIS TO PASS DX TO THE SIMULATION INSTEAD OF 
         self.binMin = minimum;
         self.binMax = maximum;
         if(binCount):
-            self.binCount = binCount;
+            self.dx = (maximum - minimum) / binCount;
         else:
-            self.binCount = (maximum - minimum) / dx;
+            self.dx = dx;
 
     '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
        of the simulation, in a way that it can be properly parsed. For linear histograms, this consists of the type-id "linear", followed
        by the binCount, and the minimum and maximum values of the range the histogram should expect data to be within.
        @returns: The stringified version of the histogram.'''
     def __str__(self):
-        return ("\"linear " + str(self.binCount) + " " + str(self.binMin) + " " + str(self.binMax) + "\"");
+        return ("\"linear " + str(self.binMin) + " " + str(self.binMax) + " " + str(self.dx) + "\"");
 
 '''
 Class for specifying the parameters of a custom histogram.

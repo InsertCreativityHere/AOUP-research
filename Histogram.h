@@ -22,7 +22,7 @@ namespace histogram
     class LinearHistogram : public virtual Histogram
     {
         public:
-            LinearHistogram(unsigned long bins, double minimum, double maximum);
+            LinearHistogram(double minimum, double maximum, double dx);
             std::vector<unsigned long> sort(const std::vector<double>& data);
             std::vector<double> getBins();
 

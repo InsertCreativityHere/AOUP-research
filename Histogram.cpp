@@ -1,5 +1,6 @@
 
 #include "Histogram.h"
+#include <cmath>
 
 namespace histogram
 {
@@ -8,30 +9,30 @@ namespace histogram
     {
     }
 
-    LinearHistogram::LinearHistogram(unsigned long bins, double minimum, double maximum):
-    Histogram(bins, minimum, maximum), width((maximum - minimum) / bins)
+    LinearHistogram::LinearHistogram(double minimum, double maximum, double dx):
+    Histogram(ceil((maximum - minimum) / dx), minimum, maximum), width(dx)
     {
     }
-
+    //TODO & NOTE: The second the last (overflow included) bin won't be the same size as the others until (max - min)/dx is a whole number. Otherwise it's smaller than the rest.
     std::vector<unsigned long> LinearHistogram::sort(const std::vector<double>& data)
     {
-        std::vector<unsigned long> bins(binCount);
+        std::vector<unsigned long> values(binCount);
 
         for(const auto& point : data)
         {
             if(point <= min)
             {
-                bins.front()++;
+                values.front()++;
             } else
             if(point >= max)
             {
-                bins.back()++;
+                values.back()++;
             } else{
-                bins[(unsigned long)((point - min) / width) + 1]++;
+                values[(unsigned long)((point - min) / width) + 1]++;
             }
         }
 
-        return bins;
+        return values;
     }
 
     std::vector<double> LinearHistogram::getBins()
