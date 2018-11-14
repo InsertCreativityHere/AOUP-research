@@ -11,17 +11,55 @@ import os;
 import threading;
 
 #==================================================================================================================
-# Code for generating prediction curves. Initialize it with the external force, then generate predictions
-# for specific scenarios by calling 'generateProfile'.
+#                                       ---PREDICTION GENERATION---
+# The classes in this section generate prediction profiles for various potentials and situations. They all follow the
+# same ideas. First one initialized a new object of the class with the external potential of the simulation. Then one
+# can call 'generateProfile', which returns a function representing the prediction. These functions are normalized,
+# and designed to handle NumPy arrays.
 
+'''
+Generates the predicted density profile for a system in the thermal limit (ie. diffusion >> memory).
+'''
+class ThermalDensityPredictor:
+    '''Generates a new ThermalDensityPredictor.
+       @param potential: Callable that returns the external potential of the system as a function of position. (Must accept NumPy arrays).'''
+    def __init__(self, potential):
+        self.potential = potential;
+
+    '''Generates the prediction profile as a normalized density.
+       @param index: The index of the simulation, for logging purposes, this should be an integer, but can actually be anything.
+       @param tau: The memory constant being used in the simulation. This actually has no bearing in the thermal limit, and is only
+                   included for compatability purposes, so that all calls to generateProfile look identicial.
+       @param diffusion: The diffusion constant being used in the simulation.
+       @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
+       @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
+       @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)
+       @returns: A function specifying the predicted density of particles at every position.'''
+    def generateProfile(self, index, tau, diffusion, xMin=-1000, xMax=1000, dx=0.001):
+        # Compute the normalization constant by integrating the un-normalized density with the trapezoidal algorithm.
+        Y = self.p(np.arange(xMin, xMax, dx), diffusion, 1);
+        normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * dx);
+        # Return the normalized density function.
+        return lambda x: self.p(x, diffusion, normalization);
+
+    '''The actual particle distribution density function. The actual prediction functions this class generates are this function,
+       wrapped in lambda functions for each specific case of potential and simulation constants.
+       @param x: The position to evaluate the density at. This is the only parameter unwrapped in the internal lambda.
+       @param diffusion: The diffusion constant being used in the simulation.
+       @param normalization: The normalization constant to ensure this is a normalized density distribution.
+       @returns: The normalized predicted density value at the specified location given the diffusion present.'''
+    def p(self, x, diffusion, normalization):
+        return np.exp(-(self.potential(x)) / diffusion) / normalization;
+
+#TODO CHECK THIS THING, IT'S PROBABLY BROKEN, ALSO COMMENTS
 from scipy.special import erfi
 import scipy.linalg
 import itertools as itt
 
+'''THIS IS LARGELY NON-FUNCTIONAL'''
 class PersistentDensityPredictor:
     def __init__(self, potential):
-        self.U_ = potential;
-        self.dU_ = self.U_.deriv();
+        self.dU_ = potential.deriv();
         self.d2U_ = self.dU_.deriv();
 
     def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
@@ -76,7 +114,6 @@ class PersistentDensityPredictor:
             jumps_per_region[j1].append([i1,k,-1]) # outgoing jump in region j1
             jumps_per_region[j2].append([i2,k, 1]) # incoming jump in region j2
         jumps_per_region = [ sorted(jpr) for jpr in jumps_per_region ]
-        self.q0 = sp.sqrt(tau/(2*sp.pi*diffusion))
         bins = [-sp.inf];
         vals = [[0,1]];
         for j,jpr in enumerate(jumps_per_region):
@@ -94,50 +131,62 @@ class PersistentDensityPredictor:
                 print(str(index) + ":\tThere are numerical precision issues.");
         bins.append(sp.inf);
 
-        return lambda x: self.p(x, tau, diffusion, E, sp.array(bins), sp.array(vals))
+        return lambda x: self.p(x, tau, diffusion, E, sp.array(bins), sp.array(vals), (sp.sqrt(tau/(2*sp.pi*diffusion))), (-tau / (2 * diffusion)))
 
-    def p(self, x, tau, diffusion, E, bins, vals):
+    def p(self, x, tau, diffusion, E, bins, vals, q0, q1):
         a,b = vals[sp.digitize(x,bins)-1].T
-        return self.d2U_(x)*self.q0*(a*E(self.dU_(x))+b)*sp.exp(-tau*self.dU_(x)**2/(2*diffusion));
-
-class ThermalDensityPredictor:
-    def __init__(self, potential):
-        self.potential = potential;
-
-    def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
-        dx = ((xMax - xMin) / (sampleCount*100));
-        normalization = np.sum(self.p(np.arange(xMin, xMax, dx), diffusion, 1)) * dx;
-        return lambda x: self.p(x, diffusion, normalization);
-
-    def p(self, x, diffusion, normalization):
-        return np.exp(-(self.potential(x)) / diffusion) / normalization;
+        return self.d2U_(x)*q0*(a*E(self.dU_(x))+b)*sp.exp(q1*self.dU_(x)**2);
 
 #==================================================================================================================
-# Utilities for recording and visualing collected data
+#                                              ---DATA VISUALIZATION---
+# The classes in this section provide utilities for handling and visualizing data. Principally it contains a class for generating
+# histograms from data files, both as bar graphs, and as interpolated functions. It also provides a class for animating histograms
+# if their content changes with respect to some variable. There's an additional convenience method included for creating and
+# playing said animations.
 
+'''
+Class that stores large amounts of data sorted into histograms. In practice, this actually stores a list of histograms, often with
+them corresponding to histograms varying over time.
+'''
 class Histogram:
+    '''Loads the histograms stored in a specified file.
+       @param filePath: Path of the data file to load into the histogram.'''
     def __init__(self, filePath):
         with open(filePath) as file:
+            # Load the bins from the first line of the data file.
             self.bins = np.array(list(map(float, next(file)[:-2].split(','))));
-            self.times = [];
-            self.data = [];
+            times = [];
+            data = [];
+            # Loop through the renaming lines, each line is just a comma separated list of the bin values.
             for line in file:
-                self.times.append(float(line[(line.index("t=") + 2):line.index(':')]));
-                self.data.append(list(map(float, line[(line.index(':') + 1):-2].split(','))));
-            self.times = np.array(self.times);
-            self.data = np.array(self.data);
+                times.append(float(line[(line.index("t=") + 2):line.index(':')]));
+                data.append(np.array(list(map(float, line[(line.index(':') + 1):-2].split(',')))));
+            # Convert the data into numpy arrays, and store them for later use.
+            self.times = np.array(times);
+            self.data = np.array(data);
 
-    def interpolate(self, frame=-1):
+    '''Interpolates the values of a histogram's bins into a set of X and Y coordinates.
+       @param frame: The histogram to interpolate, with 0 being the first histogram in the file, must be an integer. (defaults to -1, the last histogram)
+       @param normalize: True if the histogram's values should be normalize, False to use the raw data. (defaults to True)
+       @returns: A tuple of X and Y coordinates that represent the piecewise linear interpolation of the histogram's data, where each X
+                 value is the X position midway between the bin's bounds, and the corresponding Y is the value of that bin.'''
+    def interpolate(self, frame=-1, normalize=True):
+        # Compute the points in the middle of each bin's bounds for the X values.
         X = (self.bins[1:] + self.bins[:-1]) / 2;
-        normalizer = 0;
-        lastPoint = self.data[frame][1]
-        for point in self.data[frame][2:-1]:
-            normalizer += min(lastPoint, point) + (abs(point - lastPoint) / 2);
-            lastPoint = point;
-        normalizer *= (self.bins[1] - self.bins[0]);
-        Y = self.data[frame][1:-1] / normalizer;
+        # Fetch the data from all the non-overflow bins for the Y values.
+        Y = self.data[frame][1:-1];
+
+        if(normalize):
+            # Compute the normalization constant by taking the integral over the function with the trapazoidal algorithm.
+            normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * (self.bins[1] - self.bins[0]));
+            # Normalize the histogram values.
+            Y /= normalization;
+
         return (X, Y);
 
+'''
+TODO COMMENTS
+'''
 class Animator:
     def __init__(self, histogram):
         self.left = histogram.bins[:-1];
@@ -175,15 +224,20 @@ class Animator:
         self.fig.suptitle("Time = " + str(self.histogram.times[index]) + "s");
         return self.patch;
 
-def viewHistogram(dataFile):
-    histogram = Histogram(dataFile);
+'''
+Convenience function for loading an animation from a histogram data file. After loading the data in, it will immediately
+launch a matplotlib window that plays through an animation of the histogram's bins.
+@param filePath: Path of the data file to load the animation from.
+'''
+def viewHistogram(filePath):
+    histogram = Histogram(filePath);
     animator = Animator(histogram);
     ani = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histogram.data)), repeat=False);
     plt.show();
     plt.close();
 
 #==================================================================================================================
-# Utilities for creating functions.
+# ---FUNCTION CREATION--- TODO EVERYTHING UNDER THIS NEEDS BETTER COMMENTS
 
 '''
 Class encapsulating a polynomial, it's intialized with coeffecients in ascending order (lowest order coeffecient
@@ -303,7 +357,8 @@ class PiecewiseCustom2ndOrder:
         return self.function.integ(C);
 
 #                            ax, ay, ady, ad2y, bx, by, bdy, bd2y
-def create2Way2ndOrderSpline(a, A, S, U, b, B, T, V, check=False):
+def create2Way2ndOrderSpline(a, A, S, U, b, B, T, V, check=-1):
+    # Pre-calculate the powers of delta.
     delta1 = b-a;
     delta2 = delta1**2;
     delta3 = delta1**3;
@@ -326,16 +381,20 @@ def create2Way2ndOrderSpline(a, A, S, U, b, B, T, V, check=False):
     c3 = (-(3 * (b**2) * i1) + (3 * (a**2) * j1) - (3 * b * D) + (3 * a * G) - i3 + j3) / delta3;
     c4 = -(-(3 * b * i1) + (3 * a * j1) - D + G) / delta3;
     c5 = (-i1 + j1) / delta3;
-    # Return a 5th order polynomial spline.
-    if(check):
-        # Ensure there's no spurious extrema.
-        roots = np.roots(np.array([5*c5, 4*c4, 3*c3, 2*c2, c1]));
-        return (PolyFunc((c0, c1, c2, c3, c4, c5)), (len(np.where((roots > a) & (roots < b))[0]) == 0));
-    else:
-        return (PolyFunc((c0, c1, c2, c3, c4, c5)), True);
+    spline = PolyFunc((c0, c1, c2, c3, c4, c5));
+
+    # Ensure there's no spurious extrema up to the specified degree.
+    instabilities = [];
+    for i in range(min(4, check + 1)): #It's only useful to check up to the 4th derivative of a 5th order polynomial. Higher order derivatives are just constant.
+        Dspline = spline.deriv();
+        extrema = np.roots(Dspline.c);
+        instabilities.append(len(np.where((extrema > a) & (extrema < b))[0]) == 0);
+
+    # Return the spline and it's ordered instabilities.
+    return (spline, instabilities);
 
 #                            ax, ay, ady, ad2y, direction: false-left, true-right
-def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=False):
+def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=-1):
     # Create the intermediate splining values.
     i1 = U / 2;
     i2 = S - (a * U);
@@ -344,16 +403,20 @@ def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=False):
     c0 = -(i1 * (a**2)) - (i2 * a) + A;
     c1 = i2;
     c2 = i1;
-    # Return a 2nd order polynomial spline.
-    if(check):
-        # Ensure there's no spurious extrema.
-        roots = np.roots(np.array([U, c1]));
+    spline = PolyFunc((c0, c1, c2));
+
+    # Ensure there's no spurious extrema up to the specified degree.
+    instabilities = [];
+    for i in range(min(1, check + 1)): #It's only useful to check the 1st derivative of a 2nd order polynomial. Higher order derivatives are just constant.
+        Dspline = spline.deriv();
+        extrema = np.roots(Dspline.c);
         if(direction):
-            return (PolyFunc((c0, c1, c2)), (len(np.where(roots > a)[0]) == 0));
+            instabilities.append(len(np.where(extrema > a)[0]) == 0);
         else:
-            return (PolyFunc((c0, c1, c2)), (len(np.where(roots < a)[0]) == 0));
-    else:
-        return (PolyFunc((c0, c1, c2)), True);
+            instabilities.append(len(np.where(extrema < b)[0]) == 0);
+
+    # Return the spline and it's ordered instabilities.
+    return (spline, instabilities);
 
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
@@ -567,23 +630,54 @@ def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
     return PolyFunc((c0,c1,c2,c3,c4));
 
 #==================================================================================================================
-# Utilities for creating histograms
-#TODO WE NEED COMMENTS AND DOCUMENTATION FOR THIS!
+#                                               ---HISTOGRAM TYPES---
+# Classes in this section are really just for nicely specifying the types of histograms to use. These are never used internally,
+# only stringified and passed along to the C++ side that runs the actual simulation.
+# There's two types of histograms currently supported by the C++ side:
+# - Linear All the bins are equally spaced over a specified range of values.
+# - Custom All the bins are specified by hand, in a single collection at initialization.
+# All histograms also have 'overflow' bins, which capture values outside the specified range the histograms cover. These
+# sit directly next to the ends of the range, and any values below or above the range go into that respective overflow bin.
 
-class LinearHistogram:
-    def __init__(self, binCount, minimum, maximum):
-        self.binCount = binCount;
+'''
+Class for specifying the parameters of a linear histogram.
+'''
+class LinearHistogram:#TODO REWORK THIS TO PASS DX TO THE SIMULATION INSTEAD OF A LAME BIN COUNT.
+    '''Creates a new linear histogram with the specified parameters.
+       @param minimum: The minimum value of data the histogram should track.
+       @param maximum: The maximum value of data the histogram should track.
+       @param binCount: The number of bins the histogram should have. These are equally spaced throughout the range.
+                        If left as none, the bin count is computed using the bin density. (defaults to None)
+       @param dx: The spacing to place between consecutive bins. This is only used if the bin count isn't
+                  manually specified. (defaults to 0.1)'''
+    def __init__(self, minimum, maximum, binCount=None, binDensity=10):
         self.binMin = minimum;
         self.binMax = maximum;
-        self.width = (maximum - minimum) / binCount;
+        if(binCount):
+            self.binCount = binCount;
+        else:
+            self.binCount = (maximum - minimum) / dx;
 
+    '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
+       of the simulation, in a way that it can be properly parsed. For linear histograms, this consists of the type-id "linear", followed
+       by the binCount, and the minimum and maximum values of the range the histogram should expect data to be within.
+       @returns: The stringified version of the histogram.'''
     def __str__(self):
         return ("\"linear " + str(self.binCount) + " " + str(self.binMin) + " " + str(self.binMax) + "\"");
 
+'''
+Class for specifying the parameters of a custom histogram.
+'''
 class CustomHistogram:
+    '''Creates a new custom histogram with the specified bins.
+       @param bins: A collection containing the bounds of the histogram's bins, from lowest to highest.'''
     def __init__(self, bins):
         self.bins = bins;
 
+    '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
+       of the simulation, in a way that it can be properly parsed. For custom histograms, this consists of the type-id "custom", followed
+       a space delimited list of the bounds of the bins, from least to greatest.
+       @returns: The stringified version of the histogram.'''
     def __str__(self):
         return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
 
@@ -648,7 +742,7 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
         if not(predictorP):
             predictorP = PersistentDensityPredictor(potential);
 
-        predictionT = predictorT.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
+        predictionT = predictorT.generateProfile(index, memory, diffusion);
         predictionP = predictorP.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 100);
