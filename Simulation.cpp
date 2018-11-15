@@ -76,6 +76,8 @@ std::vector<double> generateNormal(unsigned long size, double mean, double stdde
  **/
 void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histogram::Recorder* forceRecorder, histogram::Recorder* noiseRecorder, const unsigned long particleCount, const double duration, const double timestep, const double diffusion, const double memory, const unsigned long dataDelay, const double startBoundLeft, const double startBoundRight, const double activeForcesMean, const double activeForcesStddev, const double noiseMean, const double noiseStddev)
 {
+    unsigned long stepCount = ceil(duration / timestep);
+    unsigned int percent = 10;
     std::vector<double> positions = generateUniform(particleCount, startBoundLeft, startBoundRight);
     std::vector<double> activeForces = generateNormal(particleCount, activeForcesMean, activeForcesStddev);
     std::vector<double> noise;
@@ -93,6 +95,12 @@ void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histog
 
         if(currentStep % dataDelay == 0)
         {
+            if(((currentStep * 100) / totalSteps) > percent)
+            {
+                std::cout << "Simulation Progress = " << percent << "%" << std::endl;
+                percent += 10;
+            }
+
             auto currentTime = (currentStep * timestep);
             if(posRecorder)
             {

@@ -758,13 +758,15 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
 
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
-    with subproc.Popen(command. stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True, check=True) as proc:
-        stdBuffer = str(index) + ":\tSimulation Progress: 0%";
+    with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
+        stdBuffer = str(index) + ":\tSimulation Started.";
         while((stdBuffer != "") and (proc.poll() != None)):
             if(stdBuffer):
                 print(str(index) + ":\t" + stdBuffer);
             stdBuffer = proc.stdout.readLine();
         print(str(index) + ":\tSimulation finished with exit code" + str(proc.poll()));
+        if(proc.poll() != 0):
+            raise sproc.CalledProcessError(sproc.poll(), command);
 
     # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
     if(threading.current_thread() == threading.main_thread()):
