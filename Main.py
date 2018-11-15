@@ -759,14 +759,14 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
     with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
-        stdBuffer = str(index) + ":\tSimulation Started.";
-        while((stdBuffer != "") and (proc.poll() != None)):
+        stdBuffer = "Simulation Started: 0%";
+        while((stdBuffer != "") or (proc.poll() == None)):
             if(stdBuffer):
                 print(str(index) + ":\t" + stdBuffer);
-            stdBuffer = proc.stdout.readLine();
+            stdBuffer = proc.stdout.readline();
         print(str(index) + ":\tSimulation finished with exit code" + str(proc.poll()));
         if(proc.poll() != 0):
-            raise sproc.CalledProcessError(sproc.poll(), command);
+            raise sproc.CalledProcessError(proc.poll(), command);
 
     # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
     if(threading.current_thread() == threading.main_thread()):
@@ -804,7 +804,7 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
         red = patches.Patch(color="red", label="result");
         plt.legend(handles=[black, green, blue, red], loc=1);
 
-        plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=400);
+        plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=200);
         plt.close();
     if(forceRecorder):
         pass;#TODO
