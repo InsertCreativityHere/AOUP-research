@@ -35,7 +35,7 @@ class ThermalDensityPredictor:
        @returns: A function specifying the predicted density of particles at every position.'''
     def generateProfile(self, index, diffusion, xMin=-1000, xMax=1000, dx=0.001):
         # Compute the normalization constant by integrating the un-normalized density with the trapezoidal algorithm.
-        Y = self.p(np.arange(xMin, xMax, dx), diffusion, 1);
+        Y = np.exp(-(self.potential(np.arange(xMin, xMax, dx))) / diffusion);
         normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * dx);
         # Return the normalized density function.
         return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
@@ -679,7 +679,7 @@ class LinearHistogram:
                         If left as none, the bin count is computed using the bin density. (defaults to None)
        @param dx: The spacing to place between consecutive bins. This is only used if the bin count isn't
                   manually specified. (defaults to 0.1)'''
-    def __init__(self, minimum, maximum, binCount=None, binDensity=10):
+    def __init__(self, minimum, maximum, binCount=None, dx=10):
         self.binMin = minimum;
         self.binMax = maximum;
         if(binCount):
