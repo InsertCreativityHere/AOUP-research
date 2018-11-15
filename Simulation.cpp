@@ -184,7 +184,7 @@ histogram::Recorder* createRecorder(const std::string& str)
 
     if(paramVector[0] == "linear")
     {
-        histogram::Histogram* histo = new histogram::LinearHistogram(std::stoul(paramVector[1]), std::stod(paramVector[2]), std::stod(paramVector[3]));
+        histogram::Histogram* histo = new histogram::LinearHistogram(std::stod(paramVector[1]), std::stod(paramVector[2]), std::stod(paramVector[3]));
         return new histogram::Recorder(*histo);
     } else
     if(paramVector[0] == "custom")

@@ -679,7 +679,7 @@ class LinearHistogram:
                         If left as none, the bin count is computed using the bin density. (defaults to None)
        @param dx: The spacing to place between consecutive bins. This is only used if the bin count isn't
                   manually specified. (defaults to 0.1)'''
-    def __init__(self, minimum, maximum, binCount=None, dx=10):
+    def __init__(self, minimum, maximum, binCount=None, dx=0.1):
         self.binMin = minimum;
         self.binMax = maximum;
         if(binCount):
@@ -689,7 +689,8 @@ class LinearHistogram:
 
     '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
        of the simulation, in a way that it can be properly parsed. For linear histograms, this consists of the type-id "linear", followed
-       by the binCount, and the minimum and maximum values of the range the histogram should expect data to be within.
+       by the minimum and maximum values of the range the histogram should expect data to be within, and the spacing interval to have
+       between consecutive bins dx.
        @returns: The stringified version of the histogram.'''
     def __str__(self):
         return ("\"linear " + str(self.binMin) + " " + str(self.binMax) + " " + str(self.dx) + "\"");
@@ -718,7 +719,12 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
     # Create the command for running the simulation.
     command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " \"" + str(potential) + "\"";
     if(outputFile):
-        command += " -of " + str(outputFile);
+        command += " -of ";
+        if(outputFile[0] != "\""):
+            command += "\"";
+        command += str(outputFile);
+        if(outputFile[-1] != "\""):
+            command += "\"";
     if(posRecorder):
         command += " -pr " + str(posRecorder);
     if(forceRecorder):
@@ -752,13 +758,17 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
 
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
-    returnVal = sproc.call(command);
-    if(returnVal != 0):
-        raise RuntimeError(str(index) + ":\tFailed to execute! Process returned: " + str(returnVal));
+    with subproc.Popen(command. stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True, check=True) as proc:
+        stdBuffer = str(index) + ":\tSimulation Progress: 0%";
+        while((stdBuffer != "") and (proc.poll() != None)):
+            if(stdBuffer):
+                print(str(index) + ":\t" + stdBuffer);
+            stdBuffer = proc.stdout.readLine();
+        print(str(index) + ":\tSimulation finished with exit code" + str(proc.poll()));
 
     # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
     if(threading.current_thread() == threading.main_thread()):
-        return exportSimulation(index, potential, predictor, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
+        return exportSimulation(index, potential, predictorT, predictorP, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
     return 0;
 
 def exportSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
@@ -771,10 +781,11 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
         if not(predictorP):
             predictorP = PersistentDensityPredictor(potential);
 
+        n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
         predictionT = predictorT.generateProfile(index, memory, diffusion);
-        predictionP = predictorP.generateProfile(index, posRecorder.binMin, posRecorder.binMax, (posRecorder.binCount * 100), memory, diffusion);
+        predictionP = predictorP.generateProfile(index, posRecorder.binMin, posRecorder.binMax, n, memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
-        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, posRecorder.binCount * 100);
+        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
         ax = plt.gca();
         ax.set_xlabel("position");
         ax.set_ylabel("particle density");
