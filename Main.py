@@ -54,13 +54,13 @@ class DoubleWellPersistentDensityPredictor:
         self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
         self.D = (self.dU(self.B) - self.dU.functions[5].c[0]) / self.dU.functions[5].c[1];
 
-    def generateProfile(self, index, memory, diffusion, dx=0.001):#TODO COMMENTS
+    def generateProfile(self, index, memory, diffusion, dx=0.001):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
         # Pre-compute some constants.
         c0 = memory / (2 * diffusion);
         c1 = np.sqrt(memory / (2 * np.pi * diffusion));
         # Compute the normalization integrals.
-        Z1 = -i(self.A, self.B, c0, dx);
-        Z2 = i(self.C, self.D, c0, dx);
+        Z1 = -self.i(self.A, self.B, c0, dx);
+        Z2 = self.i(self.C, self.D, c0, dx);
 
         # Create a function for generating the steady state distribution of a normal convex potential.
         p0 = lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
@@ -68,15 +68,15 @@ class DoubleWellPersistentDensityPredictor:
         # Create a list for storing the piecewise functions that comprise the prediction.
         functions = [];
         functions.append(p0);
-        functions.append(lambda x: (p0(x) * -i(x, self.B, c0, dx)));
-        functions.append(lambda x: (p0(x) * 0));
-        functions.append(lambda x: (p0(x) * i(self.C, x, c0, dx)));
+        functions.append(lambda x: (p0(x) * -np.vectorize(self.i)(x, self.B, c0, dx)));
+        functions.append(lambda x: (x * 0));
+        functions.append(lambda x: (p0(x) * np.vectorize(self.i)(self.C, x, c0, dx)));
         functions.append(p0);
 
         # Return the piecewise density function. TODO IS THIS ALREADY NORMALIZED??
         return lambda x: np.piecewise(x, [(x < self.A), (x >= self.A), (x >= self.B), (x >= self.C), (x >= self.D)], functions);
 
-    def i(xMin, xMax, c, dx, Z=1):#TODO COMMENTS
+    def i(self, xMin, xMax, c, dx, Z=1):#TODO COMMENTS
         Y = np.exp(c * self.dU(np.arange(xMin, xMax, dx))**2);
         return (np.sum((Y[1:] + Y[:-1]) / 2) * dx) / Z;
 
@@ -447,6 +447,7 @@ def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=-1):
     # Return the spline and it's ordered instabilities.
     return (spline, instabilities);
 
+#Deriving and integrating these wrapper functions, don't return the same type. type(DoubleWellFunc.derive) != DoubleWellFunc
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
 are specified, and afterwards it's callable as any normal function.
