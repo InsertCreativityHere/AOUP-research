@@ -96,7 +96,7 @@ void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histog
         {
             if(((currentStep * 100) / totalSteps) > percent)
             {
-                std::cout << "Simulation Progress = " << percent << "%" << std::endl;
+                std::cout << "Simulation Progress: " << percent << "%" << std::endl;
                 percent += 10;
             }
 

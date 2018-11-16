@@ -764,7 +764,7 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
             if(stdBuffer):
                 print(str(index) + ":\t" + stdBuffer);
             stdBuffer = proc.stdout.readline();
-        print(str(index) + ":\tSimulation finished with exit code" + str(proc.poll()));
+        print(str(index) + ":\tSimulation finished with exit code: " + str(proc.poll()));
         if(proc.poll() != 0):
             raise sproc.CalledProcessError(proc.poll(), command);
 
@@ -811,4 +811,4 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
     if(noiseRecorder):
         pass;#TODO
 
-    return 1;
+    return 0;
