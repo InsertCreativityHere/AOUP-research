@@ -88,8 +88,8 @@ import itertools as itt
 '''THIS IS LARGELY NON-FUNCTIONAL'''
 class PersistentDensityPredictor:
     def __init__(self, potential):
-        self.dU_ = potential.deriv();
-        self.d2U_ = self.dU_.deriv();
+        self.dU_ = potential.derive();
+        self.d2U_ = self.dU_.derive();
 
     def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
         X = sp.linspace(xMin, xMax, sampleCount);
@@ -289,7 +289,7 @@ class PolyFunc:
             x = np.array([x]);
         return np.sum(np.multiply(self.c, np.power(x[:, None], np.arange(len(self)))), axis=1);
 
-    def deriv(self):
+    def derive(self):
         if(self.derivative == None):
             self.derivative = PolyFunc(np.multiply(self.c, np.arange(len(self)))[1:]);
         return self.derivative;
@@ -345,9 +345,9 @@ class PieceFunc:
         fTEMP.append(fTEMP.pop(0));#TODO FIX THIS BETTER INSTEAD OF COPYING THE THING EVERY TIME. THE ISSUE IS PIECEWISE EVALUATES BACKWARDS.
         return np.piecewise(x, [((x >= self.bounds[i]) if (self.directions[i]) else (x > self.bounds[i])) for i in range(len(self.bounds))], fTEMP);
 
-    def deriv(self):
+    def derive(self):
         if(self.derivative == None):
-            derivatives = [func.deriv() for func in self.functions];
+            derivatives = [func.derive() for func in self.functions];
             self.derivative = PieceFunc(derivatives, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
         return self.derivative;
 
@@ -379,8 +379,8 @@ class PiecewiseCustom2ndOrder:
     def __str__(self):
         return str(self.function);
 
-    def deriv(self):
-        return self.function.deriv();
+    def derive(self):
+        return self.function.derive();
 
     def integ(self, C):
         return self.function.integ(C);
@@ -415,7 +415,7 @@ def create2Way2ndOrderSpline(a, A, S, U, b, B, T, V, check=-1):
     # Ensure there's no spurious extrema up to the specified degree.
     instabilities = [];
     for i in range(min(4, check + 1)): #It's only useful to check up to the 4th derivative of a 5th order polynomial. Higher order derivatives are just constant.
-        Dspline = spline.deriv();
+        Dspline = spline.derive();
         extrema = np.roots(Dspline.c);
         instabilities.append(len(np.where((extrema > a) & (extrema < b))[0]) == 0);
 
@@ -437,7 +437,7 @@ def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=-1):
     # Ensure there's no spurious extrema up to the specified degree.
     instabilities = [];
     for i in range(min(1, check + 1)): #It's only useful to check the 1st derivative of a 2nd order polynomial. Higher order derivatives are just constant.
-        Dspline = spline.deriv();
+        Dspline = spline.derive();
         extrema = np.roots(Dspline.c);
         if(direction):
             instabilities.append(len(np.where(extrema > a)[0]) == 0);
@@ -463,16 +463,16 @@ class DoubleWellFunc:
         ab = createSpline22100(points[1], points[0], bc(points[1]), fa, f1b, 0, 0);
         de = createSpline22100(points[3], points[4], cd(points[3]), fe, f1d, 0, 0);
 
-        ab1 = ab.deriv();
-        ab2 = ab1.deriv();
-        ab3 = ab2.deriv();
-        ab4 = ab3.deriv();
+        ab1 = ab.derive();
+        ab2 = ab1.derive();
+        ab3 = ab2.derive();
+        ab4 = ab3.derive();
         aa = createSpline11111(points[0], ab(points[0]), ab1(points[0]), ab2(points[0]), ab3(points[0]), ab4(points[0]));
 
-        de1 = de.deriv();
-        de2 = de1.deriv();
-        de3 = de2.deriv();
-        de4 = de3.deriv();
+        de1 = de.derive();
+        de2 = de1.derive();
+        de3 = de2.derive();
+        de4 = de3.derive();
         ee = createSpline11111(points[4], de(points[4]), de1(points[4]), de2(points[4]), de3(points[4]), de4(points[4]));
 
         if(f1b <= 0):
@@ -508,8 +508,8 @@ class DoubleWellFunc:
     def __str__(self_):
         return str(self.function);
 
-    def deriv(self):
-        return self.function.deriv();
+    def derive(self):
+        return self.function.derive();
 
     def integ(self, C):
         return self.function.integ(C);
@@ -805,11 +805,11 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
         if not(predictorT):
             predictorT = ThermalDensityPredictor(potential);
         if not(predictorP):
-            predictorP = PersistentDensityPredictor(potential);
+            predictorP = DoubleWellPersistentDensityPredictor(potential);
 
         n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
         predictionT = predictorT.generateProfile(index, diffusion);
-        predictionP = predictorP.generateProfile(index, posRecorder.binMin, posRecorder.binMax, n, memory, diffusion);
+        predictionP = predictorP.generateProfile(index, memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
         ax = plt.gca();
@@ -828,7 +828,7 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
         red = patches.Patch(color="red", label="result");
         plt.legend(handles=[black, green, blue, red], loc=1);
 
-        plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=200);
+        plt.savefig(str(outputFile) + "W.png", fmt=".png", dpi=200);
         plt.close();
     if(forceRecorder):
         pass;#TODO
