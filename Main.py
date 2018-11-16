@@ -712,6 +712,30 @@ class CustomHistogram:
         return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
 
 #==================================================================================================================
+'''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
+def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    i = 0;
+    args = [];
+    threads = [];
+
+    dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
+    if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
+        os.makedirs(outputFile[:dirIndex]);
+
+    for m in memory:
+        d = np.sqrt(1 + (m**2));
+        args.append([i, potential, predictorT, predictorP, outputFile + "t=" + str(m), posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, d, m, dataDelay, startBounds, activeForces, noise]);
+        thread = threading.Thread(target=runSimulation, args=args[i]);
+        threads.append(thread);
+        thread.start();
+        i += 1;
+
+    for j in range(i):
+        threads[j].join();
+
+    for j in range(i):
+        exportSimulation(*args[j]);
+
 #TODO
 def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     print(str(index) + ":\tInitializing...");
@@ -759,10 +783,10 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
     # Run the simulation.
     print(str(index) + ":\tRunning Simulation...");
     with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
-        stdBuffer = "Simulation Started: 0%";
+        stdBuffer = "Simulation Started: 0%\n";
         while((stdBuffer != "") or (proc.poll() == None)):
             if(stdBuffer):
-                print(str(index) + ":\t" + stdBuffer);
+                print(str(index) + ":\t" + stdBuffer, end='');
             stdBuffer = proc.stdout.readline();
         print(str(index) + ":\tSimulation finished with exit code: " + str(proc.poll()));
         if(proc.poll() != 0):
@@ -784,7 +808,7 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
             predictorP = PersistentDensityPredictor(potential);
 
         n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
-        predictionT = predictorT.generateProfile(index, memory, diffusion);
+        predictionT = predictorT.generateProfile(index, diffusion);
         predictionP = predictorP.generateProfile(index, posRecorder.binMin, posRecorder.binMax, n, memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);

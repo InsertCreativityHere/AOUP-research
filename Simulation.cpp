@@ -138,6 +138,7 @@ force::Force* createForce(const std::string& str)
         paramVector.push_back(s);
     }
 
+    std::transform(paramVector[0].begin(), paramVector[0].end(), paramVector[0].begin(), tolower);
     if(paramVector[0] == "poly")
     {
         std::vector<double> coeffecients(paramVector.size() - 2);
@@ -189,6 +190,7 @@ histogram::Recorder* createRecorder(const std::string& str)
         paramVector.push_back(s);
     }
 
+    std::transform(paramVector[0].begin(), paramVector[0].end(), paramVector[0].begin(), tolower);
     if(paramVector[0] == "linear")
     {
         histogram::Histogram* histo = new histogram::LinearHistogram(std::stod(paramVector[1]), std::stod(paramVector[2]), std::stod(paramVector[3]));
@@ -215,7 +217,6 @@ int main(int argc, char* argv[])
         for(int i = 0; i < argc; i++)
         {
             args[i] = std::string(argv[i]);
-            std::transform(args[i].begin(), args[i].end(), args[i].begin(), tolower);
         }
 
         // Generate the force.
