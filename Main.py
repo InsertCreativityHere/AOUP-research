@@ -52,7 +52,7 @@ class DoubleWellPersistentDensityPredictor:
         self.C = self.dU.bounds[3];
         # Find the points that match the slopes at the inflection points.
         self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
-        self.D = (self.dU(self.B) - self.dU.functions[5].c[0]) / self.dU.functions[5].c[1];
+        self.D = (self.dU(self.B) - self.dU.functions[-1].c[0]) / self.dU.functions[-1].c[1];
 
     def generateProfile(self, index, memory, diffusion, dx=0.001):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
         # Pre-compute some constants.
@@ -68,9 +68,9 @@ class DoubleWellPersistentDensityPredictor:
         # Create a list for storing the piecewise functions that comprise the prediction.
         functions = [];
         functions.append(p0);
-        functions.append(lambda x: (p0(x) * -np.vectorize(self.i)(x, self.B, c0, dx)));
+        functions.append(lambda x: (p0(x) * -np.vectorize(self.i)(x, self.B, c0, dx) / Z1));
         functions.append(lambda x: (x * 0));
-        functions.append(lambda x: (p0(x) * np.vectorize(self.i)(self.C, x, c0, dx)));
+        functions.append(lambda x: (p0(x) * np.vectorize(self.i)(self.C, x, c0, dx) / Z2));
         functions.append(p0);
 
         # Return the piecewise density function. TODO IS THIS ALREADY NORMALIZED??
@@ -274,7 +274,7 @@ to highest order), then can be called like any normal function.
 '''
 class PolyFunc:
     def __init__(self, coeffecients):
-        self.c = np.array(coeffecients);
+        self.c = np.array(coeffecients, dtype=np.float64);
         self.derivative = None;
         self.integral = None;
 
@@ -286,7 +286,7 @@ class PolyFunc:
 
     def __call__(self, x):
         if((type(x) != np.ndarray) or (x.ndim == 0)):
-            x = np.array([x]);
+            x = np.array([x], dtype=np.float64);
         return np.sum(np.multiply(self.c, np.power(x[:, None], np.arange(len(self)))), axis=1);
 
     def derive(self):
@@ -296,7 +296,7 @@ class PolyFunc:
 
     def integ(self, C):
         if(self.integral == None):
-            self.integral = PolyFunc(np.array([C]).append(np.multiply(self.c, np.reciprocal(np.arange(len.self) + 1))));
+            self.integral = PolyFunc(np.array([C], dtype=self.c.dtype).append(np.multiply(self.c, np.reciprocal(np.arange(len.self) + 1))));
         return self.integral;
 
 '''
@@ -315,7 +315,7 @@ class PieceFunc:
             if(bounds[i] <= bounds[i-1]):
                 raise ValueError("Bounds must be in increasing order, and no bounds can be the same.");
         self.functions = functions;
-        self.bounds = bounds;
+        self.bounds = np.array(bounds, dtype=np.float64);
         self.derivative = None;
         self.integral = None;
         if(directions):
@@ -341,9 +341,11 @@ class PieceFunc:
         return s;
 
     def __call__(self, x):
-        fTEMP = list(cp.deepcopy(self.functions));
-        fTEMP.append(fTEMP.pop(0));#TODO FIX THIS BETTER INSTEAD OF COPYING THE THING EVERY TIME. THE ISSUE IS PIECEWISE EVALUATES BACKWARDS.
-        return np.piecewise(x, [((x >= self.bounds[i]) if (self.directions[i]) else (x > self.bounds[i])) for i in range(len(self.bounds))], fTEMP);
+        conditions = ([x < self.bounds[0]] if self.directions[0] else [x <= self.bounds[0]]);
+        for i in range(len(self.bounds)):
+            conditions.append((x >= self.bounds[i]) if self.directions[i] else (x > self.bounds[i]));
+        conditions2 = [(x <= -2), (x > -2), (x > -1), (x > 0), (x > 1), (x > 2)]; #TODO THIS ONLY WORKS WHEN >= is used. SOMETHING SERIOUSLY WRONG HERE
+        return np.piecewise(x, conditions2, self.functions);
 
     def derive(self):
         if(self.derivative == None):
