@@ -13,30 +13,33 @@ import threading;
 #==================================================================================================================
 #                                       ---PREDICTION GENERATION---
 # The classes in this section generate prediction profiles for various potentials and situations. They all follow the
-# same ideas. First one initialized a new object of the class with the external potential of the simulation. Then one
-# can call 'generateProfile', which returns a function representing the prediction. These functions are normalized,
-# and designed to handle NumPy arrays.
+# same ideas. First a prediction is initialized with the external potential, and optional parameters that vary over the
+# different prediction types. Then one can call 'generateProfile', which returns a function representing the prediction.
+# These functions are normalized, and designed to handle NumPy arrays. generateProfile always takes the form of
+# Predictor.generateProfile(index, memory, diffusion).
 
 '''
 Generates the predicted density profile for a system in the thermal limit (ie. diffusion >> memory).
 '''
 class ThermalDensityPredictor:
     '''Generates a new ThermalDensityPredictor.
-       @param potential: Callable that returns the external potential of the system as a function of position. (Must accept NumPy arrays).'''
-    def __init__(self, potential):
+       @param potential: Callable that returns the external potential of the system as a function of position. (Must accept NumPy arrays).
+       @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
+       @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
+       @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)'''
+    def __init__(self, potential, xMin=-1000, xMax=1000, dx=0.001):
         self.potential = potential;
+        self.dx = dx;
+        self.U = -(self.potential(np.arange(xMin, xMax, self.dx)));
 
     '''Generates the prediction profile as a normalized density.
        @param index: The index of the simulation, for logging purposes, this should be an integer, but can actually be anything.
        @param diffusion: The diffusion constant being used in the simulation.
-       @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
-       @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
-       @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)
        @returns: A function specifying the predicted density of particles at every position.'''
-    def generateProfile(self, index, diffusion, xMin=-1000, xMax=1000, dx=0.001):
+    def generateProfile(self, index, memory, diffusion):
         # Compute the normalization constant by integrating the un-normalized density with the trapezoidal algorithm.
-        Y = np.exp(-(self.potential(np.arange(xMin, xMax, dx))) / diffusion);
-        normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * dx);
+        Y = np.exp(self.U / diffusion);
+        normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * self.dx);
         # Return the normalized density function.
         return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
 
@@ -45,7 +48,7 @@ Generates the predicted density profile for a system in the persistent limit (ie
 '''
 class DoubleWellPersistentDensityPredictor:
     '''POTENTIAL MUST BE PIECEWISE, MADE OF POLYNOMIALS AND MUST BE MIN, MAX, MIN!!!!!!!!'''#TODO COMMENTS
-    def __init__(self, potential):
+    def __init__(self, potential, dx=0.001):
         self.dU = potential.derive();
         self.d2U = self.dU.derive();
         self.B = self.dU.bounds[1];
@@ -53,14 +56,15 @@ class DoubleWellPersistentDensityPredictor:
         # Find the points that match the slopes at the inflection points.
         self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
         self.D = (self.dU(self.B) - self.dU.functions[-1].c[0]) / self.dU.functions[-1].c[1];
+        self.dx = dx;
 
-    def generateProfile(self, index, memory, diffusion, dx=0.001):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
+    def generateProfile(self, index, memory, diffusion):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
         # Pre-compute some constants.
         c0 = memory / (2 * diffusion);
         c1 = np.sqrt(memory / (2 * np.pi * diffusion));
         # Compute the normalization integrals.
-        Z1 = -self.i(self.A, self.B, c0, dx);
-        Z2 = self.i(self.C, self.D, c0, dx);
+        Z1 = -self.i(self.A, self.B, c0);
+        Z2 = self.i(self.C, self.D, c0);
 
         # Create a function for generating the steady state distribution of a normal convex potential.
         p0 = lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
@@ -68,17 +72,17 @@ class DoubleWellPersistentDensityPredictor:
         # Create a list for storing the piecewise functions that comprise the prediction.
         functions = [];
         functions.append(p0);
-        functions.append(lambda x: (p0(x) * -np.vectorize(self.i)(x, self.B, c0, dx) / Z1));
+        functions.append(lambda x: (p0(x) * -np.vectorize(self.i)(x, self.B, c0) / Z1));
         functions.append(lambda x: (x * 0));
-        functions.append(lambda x: (p0(x) * np.vectorize(self.i)(self.C, x, c0, dx) / Z2));
+        functions.append(lambda x: (p0(x) * np.vectorize(self.i)(self.C, x, c0) / Z2));
         functions.append(p0);
 
         # Return the piecewise density function. TODO IS THIS ALREADY NORMALIZED??
         return lambda x: np.piecewise(x, [(x < self.A), (x >= self.A), (x >= self.B), (x >= self.C), (x >= self.D)], functions);
 
-    def i(self, xMin, xMax, c, dx, Z=1):#TODO COMMENTS
-        Y = np.exp(c * self.dU(np.arange(xMin, xMax, dx))**2);
-        return (np.sum((Y[1:] + Y[:-1]) / 2) * dx) / Z;
+    def i(self, xMin, xMax, c, Z=1):#TODO COMMENTS
+        Y = np.exp(c * self.dU(np.arange(xMin, xMax, self.dx))**2);
+        return (np.sum((Y[1:] + Y[:-1]) / 2) * self.dx) / Z;
 
 #TODO CHECK THIS THING, IT'S PROBABLY BROKEN, ALSO COMMENTS
 from scipy.special import erfi
@@ -87,22 +91,22 @@ import itertools as itt
 
 '''THIS IS LARGELY NON-FUNCTIONAL'''
 class PersistentDensityPredictor:
-    def __init__(self, potential):
+    def __init__(self, potential, sampleCount, xMin=-1000, xMax=1000):
         self.dU_ = potential.derive();
         self.d2U_ = self.dU_.derive();
+        self.X = sp.linspace(xMin, xMax, sampleCount);
 
-    def generateProfile(self, index, xMin, xMax, sampleCount, tau=1, diffusion=1):
-        X = sp.linspace(xMin, xMax, sampleCount);
+    def generateProfile(self, index, memory, diffusion):
         # Find the extrema of dU, which are also the jump take offs.
-        dU  = self.dU_(X)
-        d2U = self.d2U_(X)
+        dU  = self.dU_(self.X)
+        d2U = self.d2U_(self.X)
         I1  = sp.nonzero(d2U[:-1]*d2U[1:]<0)[0] # indices where d2U changes sign between points
         # Indices where d2U is 0 and the sign changes across the 0 point
         I1  = sp.append(I1, sp.intersect1d(sp.nonzero(d2U==0)[0], sp.nonzero(d2U[:-2]*d2U[2:]<0)[0] + 1))
-        X1  = X[I1]
+        X1  = self.X[I1]
         dU1 = dU[I1]
         # Find the convex intervals.
-        IIm = sp.vstack([[0]+I1.tolist(),I1.tolist()+[len(X)-1]]).T # intervals where dU is monotonic
+        IIm = sp.vstack([[0]+I1.tolist(),I1.tolist()+[len(self.X)-1]]).T # intervals where dU is monotonic
         IIc = IIm[::2] # intervals where U is convex
         Nc  = IIc.shape[0] # number of convex regions
         # Make a list of jumps with their starting and landing point and their starting and landing region.
@@ -122,13 +126,13 @@ class PersistentDensityPredictor:
         # First build the corresponding matrix and column vector.
         A  = sp.zeros((2*Nc,2*Nc-2))
         B  = sp.zeros((2*Nc))
-        E  = lambda v,v0=sp.sqrt(2*diffusion/tau): tau**2/diffusion*v0*erfi(v/v0);
+        E  = lambda v,v0=sp.sqrt(2*diffusion/memory): memory**2/diffusion*v0*erfi(v/v0);
         for k,(i1,j1,i2,j2,s) in enumerate(jumps):
             # Zero total flux over each region.
             A[j1,k] = -1
             A[j2,k] =  1
             # q=0 at the right end of each region except
-            # q=sqrt(tau/2*pi*diffusion for the last region.
+            # q=sqrt(memory/2*pi*diffusion for the last region.
             A[Nc+j1,k] =  E(dU[IIc[j1,1]]) - E(dU[i1]);
             A[Nc+j2,k] = -E(dU[IIc[j2,1]]) + E(dU[i2]);
         B[Nc]     = -1
@@ -149,7 +153,7 @@ class PersistentDensityPredictor:
             # Iterate over the subregions of the convex region.
             a,b = 0,1 if j==0 else 0
             for i,k,s in jpr:
-                bins.append(X[i]);
+                bins.append(self.X[i]);
                 a -= s*J[k]
                 b += s*J[k]*E(dU[i])
                 vals.append([a,b]);
@@ -160,9 +164,9 @@ class PersistentDensityPredictor:
                 print(str(index) + ":\tThere are numerical precision issues.");
         bins.append(sp.inf);
 
-        return lambda x: self.p(x, tau, diffusion, E, sp.array(bins), sp.array(vals), (sp.sqrt(tau/(2*sp.pi*diffusion))), (-tau / (2 * diffusion)))
+        return lambda x: self.p(x, memory, diffusion, E, sp.array(bins), sp.array(vals), (sp.sqrt(memory/(2*sp.pi*diffusion))), (-memory / (2 * diffusion)))
 
-    def p(self, x, tau, diffusion, E, bins, vals, q0, q1):
+    def p(self, x, memory, diffusion, E, bins, vals, q0, q1):
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*q0*(a*E(self.dU_(x))+b)*sp.exp(q1*self.dU_(x)**2);
 
@@ -721,6 +725,11 @@ def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile=".
     args = [];
     threads = [];
 
+    if not(predictorT):
+        predictorT = ThermalDensityPredictor(potential);
+    if not(predictorP):
+        predictorP = DoubleWellPersistentDensityPredictor(potential);
+
     dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
     if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
         os.makedirs(outputFile[:dirIndex]);
@@ -805,13 +814,9 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
     print(str(index) + ":\tExporting results...");
     if(posRecorder):
         print(str(index) + ":\tGenerating prediction...");
-        if not(predictorT):
-            predictorT = ThermalDensityPredictor(potential);
-        if not(predictorP):
-            predictorP = DoubleWellPersistentDensityPredictor(potential);
 
         n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
-        predictionT = predictorT.generateProfile(index, diffusion);
+        predictionT = predictorT.generateProfile(index, memory, diffusion);
         predictionP = predictorP.generateProfile(index, memory, diffusion);
         posXY = Histogram(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
