@@ -309,7 +309,7 @@ After initialization it can be called like any normal function.
 Functions must be passed in left to right, as must the bounds. There is also an additional field to specify
 the direction to evaulate the piecewise function from at the boundaries. False indicates to evaulate it from the
 left, True to evaulate it from the right. If left unused, by default boundaries are always evaulated from the
-left.
+right.
 '''
 class PieceFunc:
     def __init__(self, functions, bounds, directions=None):
@@ -325,7 +325,7 @@ class PieceFunc:
         if(directions):
             self.directions = directions;
         else:
-            self.directions = [False]*len(bounds);
+            self.directions = [True]*len(bounds);
 
     def __len__(self):
         return len(self.functions);
@@ -348,8 +348,8 @@ class PieceFunc:
         conditions = ([x < self.bounds[0]] if self.directions[0] else [x <= self.bounds[0]]);
         for i in range(len(self.bounds)):
             conditions.append((x >= self.bounds[i]) if self.directions[i] else (x > self.bounds[i]));
-        conditions2 = [(x <= -2), (x > -2), (x > -1), (x > 0), (x > 1), (x > 2)]; #TODO THIS ONLY WORKS WHEN >= is used. SOMETHING SERIOUSLY WRONG HERE
-        return np.piecewise(x, conditions2, self.functions);
+        #conditions = [(x <= -2), (x > -2), (x > -1), (x > 0), (x > 1), (x > 2)]; #TODO THIS ONLY WORKS WHEN >= is used. SOMETHING SERIOUSLY WRONG HERE
+        return np.piecewise(x, conditions, self.functions);
 
     def derive(self):
         if(self.derivative == None):
@@ -720,7 +720,7 @@ class CustomHistogram:
 
 #==================================================================================================================
 '''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
-def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
+def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
     i = 0;
     args = [];
     threads = [];
@@ -736,6 +736,8 @@ def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile=".
 
     for m in memory:
         d = np.sqrt(1 + (m**2));
+        duration = m * 20;
+        timestep = m / 1000;
         args.append([i, potential, predictorT, predictorP, outputFile + "t=" + str(m), posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, d, m, dataDelay, startBounds, activeForces, noise]);
         thread = threading.Thread(target=runSimulation, args=args[i]);
         threads.append(thread);
