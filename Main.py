@@ -43,6 +43,20 @@ class ThermalDensityPredictor:
         # Return the normalized density function.
         return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
 
+'''TODO'''
+class SingleWellDensityPredictor:
+    def __init__(self, potential):
+        self.dU = potential.derive();
+        self.d2U = self.dU.derive();
+
+    def generateProfile(self, index, memory, diffusion):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
+        # Pre-compute some constants.
+        c0 = memory / (2 * diffusion);
+        c1 = np.sqrt(memory / (2 * np.pi * diffusion));
+
+        # Create a function for generating the steady state distribution of a normal convex potential.
+        p0 = lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
+
 '''
 Generates the predicted density profile for a system in the persistent limit (ie.  memory >> diffusion), for double well potentials.
 '''
@@ -200,14 +214,18 @@ class Histogram:
 
     '''Interpolates the values of a histogram's bins into a set of X and Y coordinates.
        @param frame: The histogram to interpolate, with 0 being the first histogram in the file, must be an integer. (defaults to -1, the last histogram)
+                     If a collection of frames are given, this interpolates the average between them.
        @param normalize: True if the histogram's values should be normalize, False to use the raw data. (defaults to True)
        @returns: A tuple of X and Y coordinates that represent the piecewise linear interpolation of the histogram's data, where each X
                  value is the X position midway between the bin's bounds, and the corresponding Y is the value of that bin.'''
-    def interpolate(self, frame=-1, normalize=True):
+    def interpolate(self, frame=-1, normalize=True, average):
         # Compute the points in the middle of each bin's bounds for the X values.
         X = (self.bins[1:] + self.bins[:-1]) / 2;
         # Fetch the data from all the non-overflow bins for the Y values.
         Y = self.data[frame][1:-1];
+        # If data was pulled from multiple frames, average the data together.
+        if(Y.ndim > 1):
+            Y = np.sum(Y) / Y.shape[0];
 
         if(normalize):
             # Compute the normalization constant by taking the integral over the function with the trapazoidal algorithm.
@@ -719,8 +737,34 @@ class CustomHistogram:
         return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
 
 #==================================================================================================================
+progressStrings = [];
+progressLock = threading.Lock();
+
+def updateProgress(index, progress, max=10, final=False):
+    # If progress is an integer, convert it a progress bar.
+    if(isinstance(progress, int)):
+        progress = (u'\u2588' * progress) + ('_' * (max - progress)) + "\t(" + str(progress) + '/' + str(max) + "/";
+    # Lock on the progress strings, and update the display.
+    try:
+        progressLock.acquire();
+        progressStrings[index] = progress;
+        lineLength = os.get_terminal_size();
+        display = "";
+        # Pad every progress string to ensure it has just enough characters to wrap around to the next line.
+        for progStr in progressStrings:
+            display += progStr + (' ' * min(0, (lineLength - len(progStr))));
+
+        if(final):
+            # Print the display string with a newline, as this is the final progress display.
+            print(display, end='\n');
+        else:
+            # Print the display string with a carriage return, so we can overwrite the display at the next update.
+            print(display, end='\r');
+    finally:
+        progressLock.release();
+
 '''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
-def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
+def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, timestep=0.0005, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
     i = 0;
     args = [];
     threads = [];
@@ -736,8 +780,7 @@ def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile=".
 
     for m in memory:
         d = np.sqrt(1 + (m**2));
-        duration = m * 20;
-        timestep = m / 1000;
+        duration = m * 10;
         args.append([i, potential, predictorT, predictorP, outputFile + "t=" + str(m), posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, d, m, dataDelay, startBounds, activeForces, noise]);
         thread = threading.Thread(target=runSimulation, args=args[i]);
         threads.append(thread);
