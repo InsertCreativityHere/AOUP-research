@@ -12,17 +12,18 @@ import threading;
 
 #==================================================================================================================
 #                                       ---PREDICTION GENERATION---
-# The classes in this section generate prediction profiles for various potentials and situations. They all follow the
-# same ideas. First a prediction is initialized with the external potential, and optional parameters that vary over the
-# different prediction types. Then one can call 'generateProfile', which returns a function representing the prediction.
-# These functions are normalized, and designed to handle NumPy arrays. generateProfile always takes the form of
-# Predictor.generateProfile(index, memory, diffusion).
+# The classes in this section generate prediction profiles for various potentials and situations. First a prediction is
+# initialized with the external potential, and optional parameters that vary over the different prediction types.
+# Then one can call 'generateProfile', which returns a function representing the prediction. These functions are normalized,
+# and designed to handle NumPy arrays. generateProfile always takes the form of Predictor.generateProfile(index, memory, diffusion).
+# Where index is the index of the simulation generating the profile (for logging purposes), and memory and diffusion are
+# the respective constants being used in the simulation.
 
 '''
 Generates the predicted density profile for a system in the thermal limit (ie. diffusion >> memory).
 '''
 class ThermalDensityPredictor:
-    '''Generates a new ThermalDensityPredictor.
+    '''Creates a new predictor for a potential in the thermal limit.
        @param potential: Callable that returns the external potential of the system as a function of position. (Must accept NumPy arrays).
        @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
        @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
@@ -30,74 +31,126 @@ class ThermalDensityPredictor:
     def __init__(self, potential, xMin=-1000, xMax=1000, dx=0.001):
         self.potential = potential;
         self.dx = dx;
-        self.U = -(self.potential(np.arange(xMin, xMax, self.dx)));
-
-    '''Generates the prediction profile as a normalized density.
-       @param index: The index of the simulation, for logging purposes, this should be an integer, but can actually be anything.
+        # Pre-compute a sample of the potential to speed up normalization later.
+        self.Us = -(self.potential(np.arange(xMin, xMax, self.dx))
+    '''Generates the prediction profile as a normalized density distribution.
+       @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
+       @param memory: The memory constant being used in the simulation.
        @param diffusion: The diffusion constant being used in the simulation.
        @returns: A function specifying the predicted density of particles at every position.'''
     def generateProfile(self, index, memory, diffusion):
         # Compute the normalization constant by integrating the un-normalized density with the trapezoidal algorithm.
-        Y = np.exp(self.U / diffusion);
-        normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * self.dx);
+        Y = np.exp(self.Us / diffusion);
+        normalization = np.trapz(Y, dx=self.dx);
         # Return the normalized density function.
         return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
+#Create a shortname alias for the ThermalDensityPredictor.
+t-pred = ThermalDensityPredictor;
 
-'''TODO'''
-class SingleWellDensityPredictor:
+'''
+Generates the predicted density profile for a system in the persistent limit (ie. memory >> diffusion), for a single well potential.
+'''
+class SingleWellPersistentDensityPredictor:
+    '''Creates a new predictor for a single well potential in the persistent limit.
+       @param potential: Callable that returns the external potential of the system as a function of position. (Must accept NumPy arrays).'''
     def __init__(self, potential):
         self.dU = potential.derive();
         self.d2U = self.dU.derive();
 
-    def generateProfile(self, index, memory, diffusion):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
+    '''Generates the prediction profile as a normalized density distribution.
+       @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
+       @param memory: The memory constant being used in the simulation.
+       @param diffusion: The diffusion constant being used in the simulation.
+       @returns: A function specifying the predicted density of particles at every position.'''
+    def generateProfile(self, index, memory, diffusion):
         # Pre-compute some constants.
         c0 = memory / (2 * diffusion);
         c1 = np.sqrt(memory / (2 * np.pi * diffusion));
 
-        # Create a function for generating the steady state distribution of a normal convex potential.
-        p0 = lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
+        # Return the predicted density distribution.
+        return lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
+#Create a shortname alias for the SingleWellPersistentDensityPredictor.
+swp-pred = SingleWellPersistentDensityPredictor;
 
 '''
 Generates the predicted density profile for a system in the persistent limit (ie.  memory >> diffusion), for double well potentials.
 '''
 class DoubleWellPersistentDensityPredictor:
-    '''POTENTIAL MUST BE PIECEWISE, MADE OF POLYNOMIALS AND MUST BE MIN, MAX, MIN!!!!!!!!'''#TODO COMMENTS
-    def __init__(self, potential, dx=0.001):
+    '''Creates a new predictor for a double well potential in the persistent limit.
+       @param potential: Callable that returns the external potential of the system as a function of position. (Must accept NumPy arrays).
+                         This must be a PiecewiseCustom2ndOrder at the moment. #TODO make this more general one day.
+       @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
+       @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
+       @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)'''
+    def __init__(self, potential, xMin=-1000, xMax=1000, dx=0.0001):
         self.dU = potential.derive();
         self.d2U = self.dU.derive();
+        self.dx = dx;
+        # Store a sample of x values for normalizing the prediction later.
+        self.Xs = np.arange(xMin, xMax, self.dx);
+
+        # Store the locations of the points of inflection.
         self.B = self.dU.bounds[1];
         self.C = self.dU.bounds[3];
-        # Find the points that match the slopes at the inflection points.
+        # Ensure that the provided points are inflection points.
+        if(np.abs(self.d2U(self.B)) > 0.001):
+            raise ValueError("Point of inflection not present at specified location B=" + str(self.A));
+        if(np.abs(self.d2U(self.C)) > 0.001):
+            raise ValueError("Point of inflection not present at specified location C=" + str(self.B));
+
+        # Find the points that match the slopes at the inflection points, by exploiting the fact that the end-functions are quadratics.
         self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
         self.D = (self.dU(self.B) - self.dU.functions[-1].c[0]) / self.dU.functions[-1].c[1];
-        self.dx = dx;
+        # Ensure that the slopes match those at the inflection points.
+        if(np.abs(self.dU(self.A) - self.dU(self.C)) > 0.001):
+            raise ValueError("Failed to locate slope matching C. Expected location was A=" + str(self.A));
+        if(np.abs(self.dU(self.D) - self.dU(self.B)) > 0.001):
+            raise ValueError("Failed to locate slope matching B. Expected location was D=" + str(self.D));
 
-    def generateProfile(self, index, memory, diffusion):#TODO COMMENTS, THIS IS ALSO SUPER INEFFECIENT
+    '''Generates the prediction profile as a normalized density distribution.
+       @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
+       @param memory: The memory constant being used in the simulation.
+       @param diffusion: The diffusion constant being used in the simulation.
+       @returns: A function specifying the predicted density of particles at every position.'''
+    def generateProfile(self, index, memory, diffusion):#TODO THE INTEGRALS ARE SUPER INEFFECIENT
         # Pre-compute some constants.
         c0 = memory / (2 * diffusion);
         c1 = np.sqrt(memory / (2 * np.pi * diffusion));
-        # Compute the normalization integrals.
+        # Compute the distribution integrals over the regions of AB and CD.
         Z1 = -self.i(self.A, self.B, c0);
         Z2 = self.i(self.C, self.D, c0);
 
-        # Create a function for generating the steady state distribution of a normal convex potential.
+        # Create a function for generating the steady state distribution within a single well.
         p0 = lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
 
         # Create a list for storing the piecewise functions that comprise the prediction.
         functions = [];
         functions.append(p0);
-        functions.append(lambda x: (p0(x) * -np.vectorize(self.i)(x, self.B, c0) / Z1));
-        functions.append(lambda x: (x * 0));
-        functions.append(lambda x: (p0(x) * np.vectorize(self.i)(self.C, x, c0) / Z2));
+        functions.append(lambda x: (p0(x) * (-np.vectorize(self.i)(x, self.B, c0)) / Z1));
+        functions.append(lambda x: np.zeros(x.shape));
+        functions.append(lambda x: (p0(x) * (np.vectorize(self.i)(self.C, x, c0)) / Z2));
         functions.append(p0);
+        # Combine the functions into a piecewise function.
+        #TODO THIS MIGHT BE VERY BROKEN AT INTEGER BOUNDARIES!!!
+        pred = np.piecewise(x, [(x < self.A), (x >= self.A), (x >= self.B), (x >= self.C), (x >= self.D)], functions);
 
-        # Return the piecewise density function. TODO IS THIS ALREADY NORMALIZED??
-        return lambda x: np.piecewise(x, [(x < self.A), (x >= self.A), (x >= self.B), (x >= self.C), (x >= self.D)], functions);
+        # Compute the normalization constant for the prediction.
+        Z = np.trapz(pred(self.Xs), dx=self.dx);
 
-    def i(self, xMin, xMax, c, Z=1):#TODO COMMENTS
-        Y = np.exp(c * self.dU(np.arange(xMin, xMax, self.dx))**2);
-        return (np.sum((Y[1:] + Y[:-1]) / 2) * self.dx) / Z;
+        # Return the normalized piecewise density function.
+        return lambda x: pred(x) / Z;
 
+    '''Function for computing distribution integrals internally.
+       @param a: The lower bound of integration. This must be a scalar smaller than, or equal to b.
+       @param b: The upper bound of integration. This must be a scalar larger or equal to than a.
+       @param c: Constant computed from the simulation parameters.'''
+    def i(self, a, b, c):
+        Y = np.exp(c * self.dU(np.arange(a, b, self.dx))**2);
+        return np.trapz(Y, dx=self.dx);
+#Create a shortname alias for the DoubleWellPersistentDensityPredictor.
+dwp-pred = DoubleWellPersistentDensityPredictor;
+
+#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
 #TODO CHECK THIS THING, IT'S PROBABLY BROKEN, ALSO COMMENTS
 from scipy.special import erfi
 import scipy.linalg
@@ -175,7 +228,7 @@ class PersistentDensityPredictor:
             # and describe the density in the following concave region.
             b0 = 1 if j==Nc-1 else 0
             if sp.absolute(vals[-1][0])>1e-4 or sp.absolute(vals[-1][1]-b0)>1e-4:
-                print(str(index) + ":\tThere are numerical precision issues.");
+                updateProgress(index, "There are numerical precision issues.\n");
         bins.append(sp.inf);
 
         return lambda x: self.p(x, memory, diffusion, E, sp.array(bins), sp.array(vals), (sp.sqrt(memory/(2*sp.pi*diffusion))), (-memory / (2 * diffusion)))
@@ -183,6 +236,7 @@ class PersistentDensityPredictor:
     def p(self, x, memory, diffusion, E, bins, vals, q0, q1):
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*q0*(a*E(self.dU_(x))+b)*sp.exp(q1*self.dU_(x)**2);
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 #==================================================================================================================
 #                                              ---DATA VISUALIZATION---
@@ -204,7 +258,7 @@ class Histogram:
             self.bins = np.array(list(map(float, next(file)[:-2].split(','))));
             times = [];
             data = [];
-            # Loop through the renaming lines, each line is just a comma separated list of the bin values.
+            # Loop through the remaining lines, each of which is just a comma separated list of the bin values.
             for line in file:
                 times.append(float(line[(line.index("t=") + 2):line.index(':')]));
                 data.append(np.array(list(map(float, line[(line.index(':') + 1):-2].split(',')))));
@@ -218,7 +272,7 @@ class Histogram:
        @param normalize: True if the histogram's values should be normalize, False to use the raw data. (defaults to True)
        @returns: A tuple of X and Y coordinates that represent the piecewise linear interpolation of the histogram's data, where each X
                  value is the X position midway between the bin's bounds, and the corresponding Y is the value of that bin.'''
-    def interpolate(self, frame=-1, normalize=True, average):
+    def interpolate(self, frame=-1, normalize=True):
         # Compute the points in the middle of each bin's bounds for the X values.
         X = (self.bins[1:] + self.bins[:-1]) / 2;
         # Fetch the data from all the non-overflow bins for the Y values.
@@ -316,10 +370,14 @@ class PolyFunc:
             self.derivative = PolyFunc(np.multiply(self.c, np.arange(len(self)))[1:]);
         return self.derivative;
 
-    def integ(self, C):
+    def integI(self, C=0):
         if(self.integral == None):
             self.integral = PolyFunc(np.array([C], dtype=self.c.dtype).append(np.multiply(self.c, np.reciprocal(np.arange(len.self) + 1))));
         return self.integral;
+
+    def integD(self, a, b):
+        i = self.integI();
+        return i(b) - i(a);
 
 '''
 Class encapsulating a piecewise function, it's intialized with functions, and the boundary points between them.
@@ -375,11 +433,33 @@ class PieceFunc:
             self.derivative = PieceFunc(derivatives, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
         return self.derivative;
 
-    def integ(self, C):
+    def integI(self, C=0):
         if(self.integral == None):
             integrals = [func.integ(C) for func in self.functions];
             self.integral = PieceFunc(integrals, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
         return self.integral;
+
+    def integD(self, a, b):
+        if(a > b):
+            return -integD(b, a);
+        elif(a == b):
+            return 0;
+
+        min = None;
+        total = 0;
+        for i in range(len(self.bounds)):
+            if(a < self.bounds[i]):
+                min = a;
+            if(min):
+                if(b < self.bounds[i]):
+                    total += self.functions[i].integD(a, b);
+                    break;
+                else:
+                    total += self.functions[i].integD(a, self.bounds[i]);
+                    min = self.bounds[i];
+        else:
+            total += self.functions[-1].integD(self.bounds[-1], b);
+        return total;
 
 '''WRITE BETTER DIRECTIONS TODO
 each parameter is [x, f(x), f'(x), f''(x)],
@@ -721,7 +801,7 @@ class LinearHistogram:
         return ("\"linear " + str(self.binMin) + " " + str(self.binMax) + " " + str(self.dx) + "\"");
 
 '''
-Class for specifying the parameters of a custom histogram.
+Class for specifying the parameters of a custom binned histogram.
 '''
 class CustomHistogram:
     '''Creates a new custom histogram with the specified bins.
@@ -740,31 +820,47 @@ class CustomHistogram:
 progressStrings = [];
 progressLock = threading.Lock();
 
-def updateProgress(index, progress, max=10, final=False):
+def updateProgress(index, progress, maxProg=10, final=False):
+    print(str(index) + "\t:" + progress);
+    return;
+
+    '''
+    if(stdBuffer[0:20] == "Simulation Progress:"):
+        updateProgress(index, stdBuffer[21:-2]);
+    else:
+        print(str(index) + ":\t" + stdBuffer, end='');
+    '''
+
     # If progress is an integer, convert it a progress bar.
-    if(isinstance(progress, int)):
-        progress = (u'\u2588' * progress) + ('_' * (max - progress)) + "\t(" + str(progress) + '/' + str(max) + "/";
+    try:
+        progress = int(progress) // 10;
+        progress = (u'\u2588' * progress) + ('_' * (maxProg - progress)) + "  (" + str(progress) + '/' + str(maxProg) + "/";
+    except ValueError:
+        pass;
+
+    progress = str(index) + ":    " + progress;
     # Lock on the progress strings, and update the display.
     try:
         progressLock.acquire();
         progressStrings[index] = progress;
-        lineLength = os.get_terminal_size();
+        lineLength = os.get_terminal_size()[0];
         display = "";
         # Pad every progress string to ensure it has just enough characters to wrap around to the next line.
         for progStr in progressStrings:
-            display += progStr + (' ' * min(0, (lineLength - len(progStr))));
+            display += progStr + (' ' * max(0, (lineLength - len(progStr))));
 
         if(final):
             # Print the display string with a newline, as this is the final progress display.
-            print(display, end='\n');
+            print(display, end='\r');
         else:
             # Print the display string with a carriage return, so we can overwrite the display at the next update.
-            print(display, end='\r');
+            print(display, end='\n');
     finally:
         progressLock.release();
 
 '''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
 def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, timestep=0.0005, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    global progressStrings;
     i = 0;
     args = [];
     threads = [];
@@ -778,6 +874,7 @@ def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile=".
     if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
         os.makedirs(outputFile[:dirIndex]);
 
+    progressStrings = ["***Allocating***"] * len(memory);
     for m in memory:
         d = np.sqrt(1 + (m**2));
         duration = m * 10;
@@ -792,10 +889,11 @@ def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile=".
 
     for j in range(i):
         exportSimulation(*args[j]);
+        updateProgress(j, "Complete.\n");
 
 #TODO
 def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    print(str(index) + ":\tInitializing...");
+    updateProgress(index, "Initializing...\n");
 
     # Create the command for running the simulation.
     command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " \"" + str(potential) + "\"";
@@ -838,14 +936,14 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
             os.makedirs(outputFile[:dirIndex]);
 
     # Run the simulation.
-    print(str(index) + ":\tRunning Simulation...");
+    updateProgress(index, "Running Simulation...\n");
     with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
-        stdBuffer = "Simulation Started: 0%\n";
+        stdBuffer = "Simulation Progress: 0%\n";
         while((stdBuffer != "") or (proc.poll() == None)):
             if(stdBuffer):
-                print(str(index) + ":\t" + stdBuffer, end='');
+                updateProgress(index, stdBuffer);
             stdBuffer = proc.stdout.readline();
-        print(str(index) + ":\tSimulation finished with exit code: " + str(proc.poll()));
+        updateProgress(index, "Simulation finished with exit code: " + str(proc.poll()) + '\n');
         if(proc.poll() != 0):
             raise sproc.CalledProcessError(proc.poll(), command);
 
@@ -856,9 +954,9 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
 
 def exportSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
     # Export the results.
-    print(str(index) + ":\tExporting results...");
+    updateProgress(index, "Exporting results...\n");
     if(posRecorder):
-        print(str(index) + ":\tGenerating prediction...");
+        updateProgress(index, "Generating prediction...\n");
 
         n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
         predictionT = predictorT.generateProfile(index, memory, diffusion);
