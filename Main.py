@@ -1,8 +1,8 @@
 
-from matplotlib import pyplot as plt
-from matplotlib import patches as patches
-from matplotlib import path as path
-from matplotlib import animation as animation
+from matplotlib import pyplot as plt;
+from matplotlib import patches as patches;
+from matplotlib import path as path;
+from matplotlib import animation as animation;
 import copy as cp;
 import numpy as np;
 import scipy as sp;
@@ -32,7 +32,8 @@ class ThermalDensityPredictor:
         self.potential = potential;
         self.dx = dx;
         # Pre-compute a sample of the potential to speed up normalization later.
-        self.Us = -(self.potential(np.arange(xMin, xMax, self.dx))
+        self.Us = -self.potential(np.arange(xMin, xMax, self.dx))
+
     '''Generates the prediction profile as a normalized density distribution.
        @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
        @param memory: The memory constant being used in the simulation.
@@ -45,7 +46,7 @@ class ThermalDensityPredictor:
         # Return the normalized density function.
         return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
 #Create a shortname alias for the ThermalDensityPredictor.
-t-pred = ThermalDensityPredictor;
+t_pred = ThermalDensityPredictor;
 
 '''
 Generates the predicted density profile for a system in the persistent limit (ie. memory >> diffusion), for a single well potential.
@@ -70,7 +71,7 @@ class SingleWellPersistentDensityPredictor:
         # Return the predicted density distribution.
         return lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
 #Create a shortname alias for the SingleWellPersistentDensityPredictor.
-swp-pred = SingleWellPersistentDensityPredictor;
+swp_pred = SingleWellPersistentDensityPredictor;
 
 '''
 Generates the predicted density profile for a system in the persistent limit (ie.  memory >> diffusion), for double well potentials.
@@ -148,9 +149,10 @@ class DoubleWellPersistentDensityPredictor:
         Y = np.exp(c * self.dU(np.arange(a, b, self.dx))**2);
         return np.trapz(Y, dx=self.dx);
 #Create a shortname alias for the DoubleWellPersistentDensityPredictor.
-dwp-pred = DoubleWellPersistentDensityPredictor;
+dwp_pred = DoubleWellPersistentDensityPredictor;
 
-#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+
+
 #TODO CHECK THIS THING, IT'S PROBABLY BROKEN, ALSO COMMENTS
 from scipy.special import erfi
 import scipy.linalg
@@ -236,7 +238,10 @@ class PersistentDensityPredictor:
     def p(self, x, memory, diffusion, E, bins, vals, q0, q1):
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*q0*(a*E(self.dU_(x))+b)*sp.exp(q1*self.dU_(x)**2);
-#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#Create a shortname alias for the PersistentDensityPredictor.
+p_pred = PersistentDensityPredictor;
+
+
 
 #==================================================================================================================
 #                                              ---DATA VISUALIZATION---
@@ -780,11 +785,11 @@ class LinearHistogram:
     '''Creates a new linear histogram with the specified parameters.
        @param minimum: The minimum value of data the histogram should track.
        @param maximum: The maximum value of data the histogram should track.
-       @param binCount: The number of bins the histogram should have. These are equally spaced throughout the range.
-                        If left as none, the bin count is computed using the bin density. (defaults to None)
        @param dx: The spacing to place between consecutive bins. This is only used if the bin count isn't
-                  manually specified. (defaults to 0.1)'''
-    def __init__(self, minimum, maximum, binCount=None, dx=0.1):
+                  manually specified. (defaults to 0.1)
+       @param binCount: The number of bins the histogram should have. These are equally spaced throughout the range.
+                        If left as none, the bin count is computed using the bin density. (defaults to None)'''
+    def __init__(self, minimum, maximum, dx=0.1, binCount=None):
         self.binMin = minimum;
         self.binMax = maximum;
         if(binCount):
@@ -799,6 +804,8 @@ class LinearHistogram:
        @returns: The stringified version of the histogram.'''
     def __str__(self):
         return ("\"linear " + str(self.binMin) + " " + str(self.binMax) + " " + str(self.dx) + "\"");
+# Create a shortname alias for LinearHistogram.
+l_hist = LinearHistogram;
 
 '''
 Class for specifying the parameters of a custom binned histogram.
@@ -815,6 +822,8 @@ class CustomHistogram:
        @returns: The stringified version of the histogram.'''
     def __str__(self):
         return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
+# Create a shortname alias for CustomHistogram.
+c_hist = CustomHistogram;
 
 #==================================================================================================================
 progressStrings = [];
