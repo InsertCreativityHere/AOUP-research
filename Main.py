@@ -45,7 +45,7 @@ class ThermalDensityPredictor:
         normalization = np.trapz(Y, dx=self.dx);
         # Return the normalized density function.
         return lambda x: np.exp(-(self.potential(x)) / diffusion) / normalization;
-#Create a shortname alias for the ThermalDensityPredictor.
+# Create a shortname alias for ThermalDensityPredictor.
 t_pred = ThermalDensityPredictor;
 
 '''
@@ -70,7 +70,7 @@ class SingleWellPersistentDensityPredictor:
 
         # Return the predicted density distribution.
         return lambda x: (c1 * self.d2U(x)) * np.exp(-c0 * (self.dU(x)**2));
-#Create a shortname alias for the SingleWellPersistentDensityPredictor.
+# Create a shortname alias for  SingleWellPersistentDensityPredictor.
 swp_pred = SingleWellPersistentDensityPredictor;
 
 '''
@@ -148,7 +148,7 @@ class DoubleWellPersistentDensityPredictor:
     def i(self, a, b, c):
         Y = np.exp(c * self.dU(np.arange(a, b, self.dx))**2);
         return np.trapz(Y, dx=self.dx);
-#Create a shortname alias for the DoubleWellPersistentDensityPredictor.
+# Create a shortname alias for DoubleWellPersistentDensityPredictor.
 dwp_pred = DoubleWellPersistentDensityPredictor;
 
 
@@ -238,7 +238,7 @@ class PersistentDensityPredictor:
     def p(self, x, memory, diffusion, E, bins, vals, q0, q1):
         a,b = vals[sp.digitize(x,bins)-1].T
         return self.d2U_(x)*q0*(a*E(self.dU_(x))+b)*sp.exp(q1*self.dU_(x)**2);
-#Create a shortname alias for the PersistentDensityPredictor.
+# Create a shortname alias for PersistentDensityPredictor.
 p_pred = PersistentDensityPredictor;
 
 
@@ -254,7 +254,7 @@ p_pred = PersistentDensityPredictor;
 Class that stores large amounts of data sorted into histograms. In practice, this actually stores a list of histograms, often with
 them corresponding to histograms varying over time.
 '''
-class Histogram:
+class HistogramGroup:
     '''Loads the histograms stored in a specified file.
        @param filePath: Path of the data file to load into the histogram.'''
     def __init__(self, filePath):
@@ -272,38 +272,60 @@ class Histogram:
             self.data = np.array(data);
 
     '''Interpolates the values of a histogram's bins into a set of X and Y coordinates.
-       @param frame: The histogram to interpolate, with 0 being the first histogram in the file, must be an integer. (defaults to -1, the last histogram)
-                     If a collection of frames are given, this interpolates the average between them.
-       @param normalize: True if the histogram's values should be normalize, False to use the raw data. (defaults to True)
+       @param index: The histogram to interpolate, with 0 being the first histogram in the file, must be an integer. (defaults to -1, the last histogram)
+                     If a collection of indexes are given, this interpolates the average between them.
+       @param normalize: True if the histogram's values should be normalized, False to use the raw data. (defaults to True)
        @returns: A tuple of X and Y coordinates that represent the piecewise linear interpolation of the histogram's data, where each X
                  value is the X position midway between the bin's bounds, and the corresponding Y is the value of that bin.'''
-    def interpolate(self, frame=-1, normalize=True):
+    def interpolate(self, index=-1, normalize=True):
         # Compute the points in the middle of each bin's bounds for the X values.
         X = (self.bins[1:] + self.bins[:-1]) / 2;
         # Fetch the data from all the non-overflow bins for the Y values.
-        Y = self.data[frame][1:-1];
-        # If data was pulled from multiple frames, average the data together.
+        Y = self.data[index][1:-1];
+        # If data was pulled from multiple histograms, average the data together.
         if(Y.ndim > 1):
             Y = np.sum(Y) / Y.shape[0];
-
         if(normalize):
             # Compute the normalization constant by taking the integral over the function with the trapazoidal algorithm.
-            normalization = np.sum(((Y[1:] + Y[:-1]) / 2) * (self.bins[1] - self.bins[0]));
+            normalization = np.trapz(Y, dx=(self.bins[1] - self.bins[0]));
             # Normalize the histogram values.
             Y /= normalization;
-
         return (X, Y);
 
+    '''Retrieves the bin values for histograms within the group.
+       @param index: The histogram to retrieve the values of, with 0 being the first histogram in the file, must be an integer. (defaults to -1, the last histogram)
+                     If a collection of indexes are given, this averages over all of them.
+       @param normalize: True if the histogram's values should be normalized, False to use the raw data. (defaults to False)
+       @returns: A list of the bin values for a histogram in order.'''
+    def fetchBins(self, index=-1, normalize=False):
+        # Fetch the bin data for the specified indexes.
+        Y = self.data[index];
+        # If data was pulled from multiple histograms, average them together.
+        if(Y.ndim > 1):
+            Y = np.sum(Y) / Y.shape[0];
+        if(normalize):
+            # Compute the normalization constant by integrating the data with the trapazoidal algorithm.
+            normalization = np.trapz(Y, dx=(self.bins[1] - self.bins[0]));
+            Y /= normalization;
+        return Y;
+# Create a shortname alias for HistogramGroup.
+hist_g = HistogramGroup;
+
 '''
-TODO COMMENTS
+Utility class for handling and creating bar graph animations from histogram groups.
 '''
-class Animator:
-    def __init__(self, histogram):
-        self.left = histogram.bins[:-1];
-        self.right = histogram.bins[1:];
+class BarGraphAnimator:
+    '''Creates a set of bar graphs for each histogram in the group passed into it, and allows for animating through them.
+       @param histograms: The histogram group to animate.
+       @param smoothing: The number of neighbors in each direction to average each histogram's data with to produce smoother data.
+                      If 0, then no averaging occurs. (defaults to 0)'''
+    def __init__(self, histograms, smoothing=0):
+        self.left = histograms.bins[:-1];
+        self.right = histograms.bins[1:];
         self.bottom = np.zeros(len(self.left));
-        self.top = histogram.data[0][1:-1];
-        self.histogram = histogram;
+        self.top = histograms.data[0][1:-1];
+        self.histograms = histograms;
+        self.smoothing = smoothing;
 
         vertexCount = 5 * len(self.left);
         self.vertices = np.zeros((vertexCount, 2));
@@ -324,27 +346,33 @@ class Animator:
         self.patch = patches.PathPatch(graphPath, facecolor='blue', edgecolor='black');
         self.ax.add_patch(self.patch);
         self.ax.set_xlim(self.left[0], self.right[-1]);
-        self.ax.set_ylim(0, (np.sum(histogram.data[0]) / 2));
-        self.fig.suptitle("Time = 0");
+        self.ax.set_ylim(0, (np.sum(histograms.data[0]) / 2));
+        self.fig.suptitle("Time = 0s");
 
+    '''Internal function for generating animation frames out of histograms.
+       @param index: The index of the histogram to generate the frame from.'''
     def animate(self, index):
-        self.top = self.histogram.data[index][1:-1];
+        self.top = self.histograms.fetchBins(list(range(max(0, (index - self.smoothing)), min(len(self.histograms[0]), (index + self.smoothing)))))[1:-1];
         self.vertices[1::5, 1] = self.top;
         self.vertices[2::5, 1] = self.top;
-        self.fig.suptitle("Time = " + str(self.histogram.times[index]) + "s");
+        self.fig.suptitle("Time = " + str(self.histograms.times[index]) + "s");
         return self.patch;
 
-'''
-Convenience function for loading an animation from a histogram data file. After loading the data in, it will immediately
-launch a matplotlib window that plays through an animation of the histogram's bins.
-@param filePath: Path of the data file to load the animation from.
-'''
-def viewHistogram(filePath):
-    histogram = Histogram(filePath);
-    animator = Animator(histogram);
-    ani = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histogram.data)), repeat=False);
-    plt.show();
-    plt.close();
+    '''Convenience function for loading an animation from a histogram data file. After loading the data in, this creates
+    and displays an animation of bar graphs over time, with each frame representing a single histogram.
+    @param filePath: The file to load the histogram data from.
+    @param repeat: Whether to loop the animation after it's finished playing. (defaults to False)
+    @param smoothing: The number of neighbors in each direction to average each histogram's data with to produce smoother data.
+                      If 0, then no averaging occurs. (defaults to 0)
+    @param step: The number of histograms to skip between each frame. (defaults to 0)'''
+    def viewHistogram(filePath, smoothing=0, repeat=False, step=0):
+        histograms = HistogramGroup(filePath);
+        animator = BarGraphAnimator(histograms, smoothing);
+        ani = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histograms.data), (step + 1)), repeat=repeat);
+        plt.show();
+        plt.close();
+# Create a shortname alias for BarGraphAnimator.
+bg_anim = BarGraphAnimator;
 
 #==================================================================================================================
 # ---FUNCTION CREATION--- TODO EVERYTHING UNDER THIS NEEDS BETTER COMMENTS
@@ -970,7 +998,7 @@ def exportSimulation(index, potential, predictorT=None, predictorP=None, outputF
         n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
         predictionT = predictorT.generateProfile(index, memory, diffusion);
         predictionP = predictorP.generateProfile(index, memory, diffusion);
-        posXY = Histogram(str(outputFile) + ".pos").interpolate();
+        posXY = HistogramGroup(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
         ax = plt.gca();
         ax.set_xlabel("position");
