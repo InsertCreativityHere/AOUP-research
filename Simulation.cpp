@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 #include "HistogramRecorder.h"
-#include "Force.h"
+#include "Function.h"
 
 /**
  * Engine for generating random distributions both for starting conditions and random noise.
@@ -74,7 +74,7 @@ std::vector<double> generateNormal(unsigned long size, double mean, double stdde
  * @param noiseMean: The mean of the random noise.
  * @param noiseStddev: The standard deviation of the random noise.
  **/
-void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histogram::Recorder* forceRecorder, histogram::Recorder* noiseRecorder, const unsigned long particleCount, const double duration, const double timestep, const double diffusion, const double memory, const unsigned long dataDelay, const double startBoundLeft, const double startBoundRight, const double activeForcesMean, const double activeForcesStddev, const double noiseMean, const double noiseStddev)
+void runSimulation(function::Function* force, histogram::Recorder* posRecorder, histogram::Recorder* forceRecorder, histogram::Recorder* noiseRecorder, const unsigned long particleCount, const double duration, const double timestep, const double diffusion, const double memory, const unsigned long dataDelay, const double startBoundLeft, const double startBoundRight, const double activeForcesMean, const double activeForcesStddev, const double noiseMean, const double noiseStddev)
 {
     unsigned int percent = 10;
     std::vector<double> positions = generateUniform(particleCount, startBoundLeft, startBoundRight);
@@ -88,7 +88,7 @@ void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histog
 
         for(auto i = 0; i < particleCount; i++)
         {
-            positions[i] += (activeForces[i] + force->getForce(positions[i])) * timestep;
+            positions[i] += (activeForces[i] + force->getValue(positions[i])) * timestep;
             activeForces[i] += (-(activeForces[i] * timestep) + (sqrt(2 * diffusion * timestep)) * noise[i]) / memory;
         }
 
@@ -118,18 +118,18 @@ void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histog
 }
 
 /**
- * Creates a force from it's stringified representation. In general these look like:
+ * Creates a function from it's stringified representation. In general these look like:
  *     <type> <param1 param2 param3...>
- * Where type is the force type, currently only the following forces types are supported:
- *     "poly" = A force specified by a polynomial.
- *     "piece" = A force
+ * Where type is the function type, currently only the following function types are supported:
+ *     "poly" = A polynomial function, where parameters is a list of coeffecients in ascending order.
+ *     "piece" = A piecewise function made of multiple component functions.
  * The additional parameters must be separated by only whitespace, and are passed directly into the
- * constructor of the specified force type. For information on the parameters, check Force.cpp
+ * constructor of the specified function type. For information on the parameters, check Function.cpp
  *
- * @param str: The stringified representation of a force to create.
- * @returns: A new force, all according to the specified type and parameeters.
+ * @param str: The stringified representation of a function to create.
+ * @returns: A new function, all according to the specified type and parameeters.
  **/
-force::Force* createForce(const std::string& str)
+function::Function* createFunction(const std::string& str)
 {
     // Split the string across whitespace (ignoring whitespace contained within single quotes) for parsing.
     std::vector<std::string> paramVector;
@@ -141,37 +141,38 @@ force::Force* createForce(const std::string& str)
         paramVector.push_back(s);
     }
 
-    // Convert the first parameter (force type) to  lowercase.
+    // Convert the first parameter (function type) to  lowercase.
     std::transform(paramVector[0].begin(), paramVector[0].end(), paramVector[0].begin(), tolower);
-    // Create the specified force with it's provided parameters.
+
+    // Create the specified function with it's provided parameters.
     if(paramVector[0] == "poly")
     {
         // Parse the list of coeffecients and create a new polynomial from them.
         std::vector<double> coeffecients(paramVector.size() - 1);
         std::transform((paramVector.begin() + 1), paramVector.end(), coeffecients.begin(), [](const std::string& str) {return std::stod(str);});
-        return new force::PolyForce(coeffecients);
+        return new function::PolyFunction(coeffecients);
     } else
     if(paramVector[0] == "piece")
     {
         // Allocate vectors for storing the piecewise function's parameters.
         int size = (paramVector.size() - 1) / 3;
-        std::vector<force::Force*> forces(size + 1);
+        std::vector<function::Function*> functions(size + 1);
         std::vector<double> bounds(size);
         std::vector<bool> directions(size);
 
         // Parse every triple of arguments as another piecewise component.
         for(int i = 0; i < size; i++)
         {
-            forces[i] = createForce(paramVector[(3 * i) + 1]);
+            functions[i] = createFunction(paramVector[(3 * i) + 1]);
             bounds[i] = std::stod(paramVector[(3 * i) + 2]);
             directions[i] = !!std::stoi(paramVector[(3 * i) + 3]);
         }
-        // The last argument should always be the force in the rightmost region.
-        forces[size] = createForce(paramVector[paramVector.size() - 1]);
+        // The last argument should always be the function in the rightmost region.
+        functions[size] = createFunction(paramVector[paramVector.size() - 1]);
 
-        return new force::PieceForce(forces, bounds, directions);
+        return new function::PieceFunction(functions, bounds, directions);
     } else{
-        throw std::invalid_argument(paramVector[0] + " is not a valid force type.");
+        throw std::invalid_argument(paramVector[0] + " is not a valid function type.");
     }
 }
 
@@ -225,10 +226,11 @@ histogram::Recorder* createRecorder(const std::string& str)
  * For running multiple simulations at once, use the Python wrapper Main.py instead.
  *
  * Every simulation parameter has a long name which can be specified with "--longName", and a short name for "-shortName".
- * Parameter values are all space delimited. Complex parameters like forces and recorders should always be enclosed in
+ * Parameter values are all space delimited. Complex parameters like potentials and recorders should always be enclosed in
  * single quotes, with sub parameters being space delimited within said quotes.
  *
  * The following is a complete list of the simulation parameters:
+ * The first parameter is always the potential.
  * outputFile    (of): The file name to save results to. NOTE, this should NOT include an extension, as separate extensions
  *                         are used for different data types, all of which are generated automatically and internally.
  * posRecorder   (pr): Stringified representation of the recorder to use for tracking particle positions over time.
@@ -255,8 +257,9 @@ int main(int argc, char* argv[])
             args[i] = std::string(argv[i]);
         }
 
-        // Generate the force. This is always the first argument.
-        force::Force* force = createForce(args[1]);
+        // Generate the force from a potetential function. This is always the first argument.
+        function::Function* force = createFunction(args[1]);
+        force = force->derivative()->negate();
 
         // Assign default values for everything else before parsing. (these must mirror the ones in the Python side)
         std::string outputFile = "./results";
