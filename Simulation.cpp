@@ -19,9 +19,9 @@ std::default_random_engine generator(std::chrono::system_clock::now().time_since
 
 /**
  * Creates a uniform distribution where all values inside the range are equally likely.
- * @param size The number of points to generate within the distribution.
- * @param min The minimum value to generate within the range.
- * @param max The maximum value to generate within the range.
+ * @param size: The number of points to sample from within the distribution.
+ * @param min: The minimum value to value of the range to generate from.
+ * @param max: The maximum value to value of the range to generate from.
  **/
 std::vector<double> generateUniform(unsigned long size, double min, double max)
 {
@@ -37,10 +37,10 @@ std::vector<double> generateUniform(unsigned long size, double min, double max)
 }
 
 /**
- * Creates a normal distribution where all values are generated according to a gaussian distribution.
- * @param size The number of points to generate within the distribution.
- * @param mean The average value, the one most likely to be generated.
- * @param stddev The standard deviation, how spread out the data is from the mean.
+ * Creates a normal distribution where all values are generated from a gaussian curve.
+ * @param size: The number of points to sample from within the distribution.
+ * @param mean: The average value, the one most likely to be generated.
+ * @param stddev: The standard deviation, how spread out the data is from the mean.
  **/
 std::vector<double> generateNormal(unsigned long size, double mean, double stddev)
 {
@@ -57,22 +57,22 @@ std::vector<double> generateNormal(unsigned long size, double mean, double stdde
 
 /**
  * Runs the actual simulation.
- * @param force The external force to impose on the particles.
- * @param posRecorder Recorder for logging the particle's positions over time. NULL indicates it shouldn't be tracked.
- * @param forceRecorder Recorder for logging the particle's active forces over time. NULL indicates it shouldn't be tracked.
- * @param noiseRecorder Recorder for loggint the random noise applied to the system over time. NULL indicates it shouldn't be tracked.
- * @param particleCount The number of particles to simulate.
- * @param duration The length of the simulation in seconds.
- * @param timestep The amount of time to let pass between updating the simulation.
- * @param diffusion The diffusion rate of the system.
- * @param memory The time period over which a particle's motion persists.
- * @param dataDelay The number of timesteps to wait before logging data.
- * @param startBoundLeft The left bound of the region where particles are initially generated.
- * @param startBoundRight The right bound of the region where particles are initially generated.
- * @param activeForcesMean The mean of the active forces.
- * @param activeForcesStddev The standard deviation of the active forces.
- * @param noiseMean The mean of the random noise.
- * @param noiseStddev The standard deviation of the random noise.
+ * @param force: The external force to impose on the particles.
+ * @param posRecorder: Recorder for logging the particle's positions over time. NULL indicates positions shouldn't be recorded.
+ * @param forceRecorder: Recorder for logging the particle's active forces over time. NULL indicates forces shouldn't be recorded.
+ * @param noiseRecorder: Recorder for loggint the random noise applied to the system over time. NULL indicates noise shouldn't be recorded.
+ * @param particleCount: The number of particles to simulate.
+ * @param duration: The length of the simulation in seconds.
+ * @param timestep: The amount of time to let pass between updating the simulation.
+ * @param diffusion: The diffusion rate of the system.
+ * @param memory: The time period over which a particle's motion persists.
+ * @param dataDelay: The number of timesteps to wait before logging data.
+ * @param startBoundLeft: The left bound of the region where particles are initially generated.
+ * @param startBoundRight: The right bound of the region where particles are initially generated.
+ * @param activeForcesMean: The mean of the active forces.
+ * @param activeForcesStddev: The standard deviation of the active forces.
+ * @param noiseMean: The mean of the random noise.
+ * @param noiseStddev: The standard deviation of the random noise.
  **/
 void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histogram::Recorder* forceRecorder, histogram::Recorder* noiseRecorder, const unsigned long particleCount, const double duration, const double timestep, const double diffusion, const double memory, const unsigned long dataDelay, const double startBoundLeft, const double startBoundRight, const double activeForcesMean, const double activeForcesStddev, const double noiseMean, const double noiseStddev)
 {
@@ -117,18 +117,21 @@ void runSimulation(force::Force* force, histogram::Recorder* posRecorder, histog
     }
 }
 
-/**TODO THIS IS INNACURATE AND NOT WELL WRITTEN
- * Generates a force from a stringified representation OF A POTENTIAL!!!!
- * @param str The stringified representation of a force structured as follows: "<type> [ param1 param2 ... ]". The extra spaces matter ALOT.
- *            type is the type of the force, and what follows is a space delimited sequence of force specific parameters, there are currently 3 types of forces.abort
- *            - Linear (deprecated, should remove this at some point...)
- *            - Poly   Force specified by a polynomial function. It's parameters represent the coeffecients of said polynomial, given in increasing order: (param1) + (param2)x + (param3)x^2 + ...
- *            - Piece  Force specified by a piecewise function. It's parameters are a force reference, followed by a bound, and a bit representing whether to evaluate on the left or right at the bound.
- *                     force references are given by @3, where 3 indicates to use the 3rd force generated thus far. As an example "piece [ @0 5 0 @1 ]" creates a piecewise function that takes on f0 to the
- *                     left of 5 (including at it), and f1 to the left of it. A direction bit of 0 means evaluate to the left, whereas a bit of 1 indicates the right.
+/**
+ * Creates a force from it's stringified representation. In general these look like:
+ *     <type> <param1 param2 param3...>
+ * Where type is the force type, currently only the following forces types are supported:
+ *     "poly" = A force specified by a polynomial.
+ *     "piece" = A force
+ * The additional parameters must be separated by only whitespace, and are passed directly into the
+ * constructor of the specified force type. For information on the parameters, check Force.cpp
+ *
+ * @param str: The stringified representation of a force to create.
+ * @returns: A new force, all according to the specified type and parameeters.
  **/
 force::Force* createForce(const std::string& str)
 {
+    // Split the string across whitespace (ignoring whitespace contained within single quotes) for parsing.
     std::vector<std::string> paramVector;
     std::istringstream iss(str);
     std::string s;
@@ -138,49 +141,55 @@ force::Force* createForce(const std::string& str)
         paramVector.push_back(s);
     }
 
+    // Convert the first parameter (force type) to  lowercase.
     std::transform(paramVector[0].begin(), paramVector[0].end(), paramVector[0].begin(), tolower);
+    // Create the specified force with it's provided parameters.
     if(paramVector[0] == "poly")
     {
-        std::vector<double> coeffecients(paramVector.size() - 2);
-        std::transform((paramVector.begin() + 2), paramVector.end(), coeffecients.begin(), [](const std::string& str) {return std::stod(str);});
-        for(int i = 0; i < coeffecients.size(); i++)
-        {
-            coeffecients[i] *= -(i + 1);
-        }
+        // Parse the list of coeffecients and create a new polynomial from them.
+        std::vector<double> coeffecients(paramVector.size() - 1);
+        std::transform((paramVector.begin() + 1), paramVector.end(), coeffecients.begin(), [](const std::string& str) {return std::stod(str);});
         return new force::PolyForce(coeffecients);
     } else
     if(paramVector[0] == "piece")
     {
+        // Allocate vectors for storing the piecewise function's parameters.
         int size = (paramVector.size() - 1) / 3;
         std::vector<force::Force*> forces(size + 1);
         std::vector<double> bounds(size);
         std::vector<bool> directions(size);
 
+        // Parse every triple of arguments as another piecewise component.
         for(int i = 0; i < size; i++)
         {
             forces[i] = createForce(paramVector[(3 * i) + 1]);
             bounds[i] = std::stod(paramVector[(3 * i) + 2]);
             directions[i] = !!std::stoi(paramVector[(3 * i) + 3]);
         }
+        // The last argument should always be the force in the rightmost region.
         forces[size] = createForce(paramVector[paramVector.size() - 1]);
 
         return new force::PieceForce(forces, bounds, directions);
     } else{
-        return NULL;
+        throw std::invalid_argument(paramVector[0] + " is not a valid force type.");
     }
 }
 
-/**TODO THIS IS INNACURATE AND NOT WELL WRITTEN
- * Converts string arguments into a histogram recorder.
- * @param type The type of histogram recorder to create.
- *        linear = A histogram with equally spaced bins.
- *        custom = A histogram with customly specified bins.
- * @param parameters A comma delimited list of parameters, these are used to initialize the specified histogram type.
- *                   For further information on these, check the parameters for each type of histogram in Histogram.h.
- * @return A new histogram and a recorder on top of it, all according to the specified type and parameeters,
+/**
+ * Creates a histogram recorder from it's stringified representation. In general these look like:
+ *     <type> <param1 param2 param3...>
+ * Where type is the histogram type, currently only the following histogram types are supported:
+ *     "linear" = A histogram with equally spaced bins.
+ *     "custom" = A histogram with customly specified bins.
+ * The additional parameters must be separated by only whitespace, and are passed directly into the
+ * constructor of the specified histogram type. For information on the parameters, check Histogram.cpp
+ *
+ * @param str: The stringified representation of a histogram to create.
+ * @returns: A new histogram and a recorder on top of it, all according to the specified type and parameeters.
  **/
 histogram::Recorder* createRecorder(const std::string& str)
 {
+    // Split the string across whitespace (ignoring whitespace contained within single quotes) for parsing.
     std::vector<std::string> paramVector;
     std::istringstream iss(str);
     std::string s;
@@ -190,7 +199,9 @@ histogram::Recorder* createRecorder(const std::string& str)
         paramVector.push_back(s);
     }
 
+    // Convert the first parameter (histogram type) to  lowercase.
     std::transform(paramVector[0].begin(), paramVector[0].end(), paramVector[0].begin(), tolower);
+    // Create the specified histogram with it's provided parameters.
     if(paramVector[0] == "linear")
     {
         histogram::Histogram* histo = new histogram::LinearHistogram(std::stod(paramVector[1]), std::stod(paramVector[2]), std::stod(paramVector[3]));
@@ -198,31 +209,56 @@ histogram::Recorder* createRecorder(const std::string& str)
     } else
     if(paramVector[0] == "custom")
     {
+        // Parse all the bins of the histogram and create a new histogram from them.
         std::vector<double> bins(paramVector.size() - 1);
         std::transform(++paramVector.begin(), paramVector.end(), bins.begin(), [](const std::string& str) {return std::stod(str);});
         histogram::Histogram* histo = new histogram::CustomHistogram(bins);
         return new histogram::Recorder(*histo);
     } else{
-        return NULL;
+        throw std::invalid_argument(paramVector[0] + " is not a valid histogram type.");
     }
 }
 
-//TODO write something here!
+/**
+ * Main method which parses command line arguments into simulation parameters, then runs the simulation, exporting
+ * any recorded data into their respective files at the end. This can only run a single simulation, single-threaded.
+ * For running multiple simulations at once, use the Python wrapper Main.py instead.
+ *
+ * Every simulation parameter has a long name which can be specified with "--longName", and a short name for "-shortName".
+ * Parameter values are all space delimited. Complex parameters like forces and recorders should always be enclosed in
+ * single quotes, with sub parameters being space delimited within said quotes.
+ *
+ * The following is a complete list of the simulation parameters:
+ * outputFile    (of): The file name to save results to. NOTE, this should NOT include an extension, as separate extensions
+ *                         are used for different data types, all of which are generated automatically and internally.
+ * posRecorder   (pr): Stringified representation of the recorder to use for tracking particle positions over time.
+ * forceRecorder (fr): Stringified representation of the recorder to use for tracking the active forces of particles over time.
+ * noiseRecorder (nr): Stringified representation of the recorder to use for tracking the noise imposed on particles over time.
+ * particleCount (n): The number of particles to use in the simulation.
+ * duration      (t): The duration of time to run the simulation for. The simulation will run for $ceil(t/dt)$ total steps.
+ * timestep      (dt): The interval of time to let pass in between simulation updates.
+ * diffusion     (d): The diffusion coefficient to use in the simulation. Represents the strength of thermal flucuations.
+ * memory        (m): The memory coeffecient to use in the simulation. Represents the strength of motion persistence.
+ * dataDelay     (dd): The number of simulation updates to let pass in between each time data is recorded.
+ * startBound    (sb): Takes two parameters for the left and right limits of where to generate partices at, in that order.
+ * activeForce   (af): Takes two parameters for the mean and standard deviation of the distribution that initial active forces are drawn from, in that order.
+ * noise         (no): Takes two parameters for the mean and standard deviation of the distribution that noise is drawn from, in that order.
+ **/
 int main(int argc, char* argv[])
 {
     try
     {
-        // Convert char arrays to lowercase strings for parsing.
+        // Convert char arrays to strings for parsing.
         std::string args[argc];
         for(int i = 0; i < argc; i++)
         {
             args[i] = std::string(argv[i]);
         }
 
-        // Generate the force.
+        // Generate the force. This is always the first argument.
         force::Force* force = createForce(args[1]);
 
-        // Assign default values for everything else
+        // Assign default values for everything else before parsing. (these must mirror the ones in the Python side)
         std::string outputFile = "./results";
         histogram::Recorder* posRecorder = NULL;
         histogram::Recorder* forceRecorder = NULL;
@@ -240,72 +276,76 @@ int main(int argc, char* argv[])
         double noiseMean = 0;
         double noiseStddev = 1;
 
+        // Parse the additional command line arguments for simulation parameters.
         for(int i = 2; i < argc; i++)
         {
-            if(args[i] == "-of")
+            if((args[i] == "-of") || (args[i] == "--outputFile"))
             {
                 outputFile = args[++i];
             } else
-            if(args[i] == "-pr")
+            if((args[i] == "-pr") || (args[i] == "--posRecorder"))
             {
                 posRecorder = createRecorder(args[++i]);
             } else
-            if(args[i] == "-fr")
+            if((args[i] == "-fr") || (args[i] == "--forceRecorder"))
             {
                 forceRecorder = createRecorder(args[++i]);
             } else
-            if(args[i] == "-nr")
+            if((args[i] == "-nr") || (args[i] == "--noiseRecorder"))
             {
                 noiseRecorder = createRecorder(args[++i]);
             } else
-            if(args[i] == "-n")
+            if((args[i] == "-n") || (args[i] == "--particleCount"))
             {
                 particleCount = std::stoul(args[++i]);
             } else
-            if(args[i] == "-t")
+            if((args[i] == "-t") || (args[i] == "--duration"))
             {
                 duration = std::stod(args[++i]);
             } else
-            if(args[i] == "-dt")
+            if((args[i] == "-dt") || (args[i] == "--timestep"))
             {
                 timestep = std::stod(args[++i]);;
             } else
-            if(args[i] == "-d")
+            if((args[i] == "-d") || (args[i] == "--diffusion"))
             {
                 diffusion = std::stod(args[++i]);
             } else
-            if(args[i] == "-m")
+            if((args[i] == "-m") || (args[i] == "--memory"))
             {
                 memory = std::stod(args[++i]);
             } else
-            if(args[i] == "-dd")
+            if((args[i] == "-dd") || (args[i] == "--dataDelay"))
             {
                 dataDelay = std::stoul(args[++i]);
             } else
-            if(args[i] == "-sb")
+            if((args[i] == "-sb") || (args[i] == "--startBound"))
             {
                 startBoundLeft = std::stod(args[i+1]);
                 startBoundRight = std::stod(args[i+2]);
                 i += 2;
             } else
-            if(args[i] == "-af")
+            if((args[i] == "-af") || (args[i] == "--activeForce"))
             {
                 activeForcesMean = std::stod(args[i+1]);
                 activeForcesStddev = std::stod(args[i+2]);
                 i += 2;
             } else
-            if(args[i] == "-no")
+            if((args[i] == "-no") || (args[i] == "--noise"))
             {
                 noiseMean = std::stod(args[i+1]);
                 noiseStddev = std::stod(args[i+2]);
                 i += 2;
             } else{
-                std::cerr << "Skipping unknown parameter: " + args[i];
+                std::cerr << "Unknown paramter: " + args[i];
+                return 1;
             }
         }
 
+        // Run the simulation.
         runSimulation(force, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBoundLeft, startBoundRight, activeForcesMean, activeForcesStddev, noiseMean, noiseStddev);
 
+        // Write any recorded data to a file.
         if(posRecorder)
         {
             posRecorder->writeData(outputFile + ".pos");
@@ -324,20 +364,3 @@ int main(int argc, char* argv[])
         std::cerr << ex.what() << std::endl;
     }
 }
-
-//TODO WRITE THIS SOMEWHERE ELSE!
-//lists of parameters must be declared as "[thing1, thing2, thing3]", the whole list must be wrapped in quotes.
-//if needed up to two layers of quotes can be nested, starting with "" outside, and using '' inside.
-
-//TODO just fixing this up somehow, oh and also have it convert all the strings into lowercase!
-//first parameter is always output filename
-//second parameter is always the forces
-//-m <memory amount>
-//-d <diffusion amount>
-//-p <particle amount>
-//-dd <datadelay amount>
-//-t <duration amount>
-//-dt <timestep amount>
-//-pr <histo_type> <histo_parameters>
-//-fr <histo_type> <histo_parameters>
-//-nr <histo_type> <histo_parameters>
