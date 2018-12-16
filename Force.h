@@ -10,27 +10,22 @@ namespace force
     {
         public:
             virtual double getForce(double position) const = 0;
+            virtual Force* negate() const = 0;
+            virtual Force* derivative() const = 0;
+            virtual Force* integrateI(double c) const = 0;
+            virtual double integrateD(double a, double b) const = 0;
             std::vector<double> getForceForAll(const std::vector<double>& positions) const;
-    };
-
-    class LinearForce : public virtual Force
-    {
-        public:
-            LinearForce(double center, double slope);
-            double getForce(double position) const;
-
-        private:
-            const double center;
-            const double intensity;
     };
 
     class PolyForce : public virtual Force
     {
         public:
             PolyForce(std::vector<double> coefficients);
-            PolyForce derivative();
-            PolyForce integrate(double c);
             double getForce(double position) const;
+            PolyForce* negate() const;
+            PolyForce* derivative() const;
+            PolyForce* integrateI(double c) const;
+            double integrateD(double a, double b) const;
 
         private:
             const std::vector<double> coefficients;
@@ -41,6 +36,10 @@ namespace force
         public:
             PieceForce(std::vector<Force*> forces, std::vector<double> bounds, std::vector<bool> directions);
             double getForce(double position) const;
+            PieceForce* negate() const;
+            PieceForce* derivative() const;
+            PieceForce* integrateI(double c) const;
+            double integrateD(double a, double b) const;
 
         private:
             const std::vector<Force*> forces;
