@@ -1,4 +1,5 @@
 
+#include <cmath>
 #include <string>
 #include "Function.h"
 
@@ -78,6 +79,50 @@ namespace function
         return value;
     }
 
+    PeriodicFunction::PeriodicFunction(Function* generator, double start, double stop):
+    generator(generator), period(stop - start), offset(start), area(generator->integrateD(start, stop))
+    {
+    }
+
+    double PeriodicFunction::getValue(double position) const
+    {
+        return generator->getValue(fmod(position, period) + offset);
+    }
+
+    PeriodicFunction* PeriodicFunction::negate() const
+    {
+        return new PeriodicFunction(generator->negate(), offset, period + offset);
+    }
+
+    // Note that even though the derivative is probably undefined at the boundaries, this will always return
+    // the value generator'(offset) at both boundaries of periodicity instead. TODO
+    PeriodicFunction* PeriodicFunction::derivative() const
+    {
+        return new PeriodicFunction(generator->derivative(), offset, period + offset);
+    }
+
+    double PeriodicFunction::integrateD(double a, double b) const
+    {
+        if(b > a)
+        {
+            return -integrateD(b, a);
+        } else
+        if(b == a)
+        {
+            return 0;
+        }
+
+        int periods = floor(b / period) - floor(a / period);
+        a = fmod(a, period);
+        b = fmod(b, period);
+        if(periods == 0)
+        {
+            return generator->integrateD((a + offset), (b, offset));
+        } else{
+            return (generator->integrateD((a + offset), (period + offset)) + generator->integrateD(offset, (b + offset)) + (area * (periods - 1)));
+        }
+    }
+
     PieceFunction::PieceFunction(std::vector<Function*> functions, std::vector<double> bounds, std::vector<bool> directions):
     functions(functions), bounds(bounds), directions(directions)
     {
@@ -116,6 +161,8 @@ namespace function
         return new PieceFunction(newFunctions, newBounds, newDirections);
     }
 
+    // Note that even though the derivative is probably undefined at the boundaries, this will always return
+    // the derivative of the function that is evaulated at the boundary instead. TODO
     PieceFunction* PieceFunction::derivative() const
     {
         std::vector<Function*> newFunctions(functions.size());
@@ -128,24 +175,12 @@ namespace function
         return new PieceFunction(newFunctions, newBounds, newDirections);
     }
 
-    PieceFunction* PieceFunction::integrateI(double c) const
-    {
-        std::vector<Function*> newFunctions(functions.size());
-        for(const Function* function : functions)
-        {
-            newFunctions.push_back(function->integrateI(c));
-        }
-        std::vector<double> newBounds = bounds;
-        std::vector<bool> newDirections = directions;
-        return new PieceFunction(newFunctions, newBounds, newDirections);
-    }
-
     double PieceFunction::integrateD(double a, double b) const
     {
         if(b < a)
         {
             return -integrateD(b, a);
-        }
+        } else
         if(b == a)
         {
             return 0;
