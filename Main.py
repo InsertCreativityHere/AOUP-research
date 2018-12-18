@@ -32,7 +32,10 @@ class ThermalDensityPredictor:
         self.potential = potential;
         self.dx = dx;
         # Pre-compute a sample of the potential to speed up normalization later.
-        self.Us = -self.potential(np.arange(xMin, xMax, self.dx))
+        self.Us = -self.potential(np.arange(xMin, xMax, self.dx));
+        # Set the name and preferred color for this predictor (this is used for generating plots).
+        self.name = "thermal";
+        self.color = "orange";
 
     '''Generates the prediction profile as a normalized density distribution.
        @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
@@ -57,6 +60,9 @@ class SingleWellPersistentDensityPredictor:
     def __init__(self, potential):
         self.dU = potential.derive();
         self.d2U = self.dU.derive();
+        # Set the name and preferred color for this predictor (this is used for generating plots).
+        self.name = "persistent(sw)";
+        self.color = "green";
 
     '''Generates the prediction profile as a normalized density distribution.
        @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
@@ -87,6 +93,9 @@ class DoubleWellPersistentDensityPredictor:
         self.dU = potential.derive();
         self.d2U = self.dU.derive();
         self.dx = dx;
+        # Set the name and preferred color for this predictor (this is used for generating plots).
+        self.name = "persistent(dw)";
+        self.color = "purple";
         # Store a sample of x values for normalizing the prediction later.
         self.Xs = np.arange(xMin, xMax, self.dx);
 
@@ -164,6 +173,9 @@ class PersistentDensityPredictor:
         self.dU_ = potential.derive();
         self.d2U_ = self.dU_.derive();
         self.X = sp.linspace(xMin, xMax, sampleCount);
+        # Set the name and preferred color for this predictor (this is used for generating plots).
+        self.name = "persistent";
+        self.color = "blue";
 
     def generateProfile(self, index, memory, diffusion):
         # Find the extrema of dU, which are also the jump take offs.
