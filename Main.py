@@ -375,6 +375,235 @@ class BarGraphAnimator:
 bg_anim = BarGraphAnimator;
 
 #==================================================================================================================
+#                                               ---HISTOGRAM TYPES---
+# Classes in this section are really just for nicely specifying the types of histograms to use. These are never used internally,
+# only stringified and passed along to the C++ side that runs the actual simulation.
+# There's two types of histograms currently supported by the C++ side:
+# - Linear All the bins are equally spaced over a specified range of values.
+# - Custom All the bins are specified by hand, in a single collection at initialization.
+# All histograms also have 'overflow' bins, which capture values outside the specified range the histograms cover. These
+# sit directly next to the ends of the range, and any values below or above the range go into that respective overflow bin.
+
+'''
+Class for specifying the parameters of a linear histogram.
+'''
+class LinearHistogram:
+    '''Creates a new linear histogram with the specified parameters.
+       @param minimum: The minimum value of data the histogram should track.
+       @param maximum: The maximum value of data the histogram should track.
+       @param dx: The spacing to place between consecutive bins. This is only used if the bin count isn't
+                  manually specified. (defaults to 0.1)
+       @param binCount: The number of bins the histogram should have. These are equally spaced throughout the range.
+                        If left as none, the bin count is computed using the bin density. (defaults to None)'''
+    def __init__(self, minimum, maximum, dx=0.1, binCount=None):
+        self.binMin = minimum;
+        self.binMax = maximum;
+        if(binCount):
+            self.dx = (maximum - minimum) / binCount;
+        else:
+            self.dx = dx;
+
+    '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
+       of the simulation, in a way that it can be properly parsed. For linear histograms, this consists of the type-id "linear", followed
+       by the minimum and maximum values of the range the histogram should expect data to be within, and the spacing interval to have
+       between consecutive bins dx.
+       @returns: The stringified version of the histogram.'''
+    def __str__(self):
+        return ("\"linear " + str(self.binMin) + " " + str(self.binMax) + " " + str(self.dx) + "\"");
+# Create a shortname alias for LinearHistogram.
+l_hist = LinearHistogram;
+
+'''
+Class for specifying the parameters of a custom binned histogram.
+'''
+class CustomHistogram:
+    '''Creates a new custom histogram with the specified bins.
+       @param bins: A collection containing the bounds of the histogram's bins, from lowest to highest.'''
+    def __init__(self, bins):
+        self.bins = bins;
+
+    '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
+       of the simulation, in a way that it can be properly parsed. For custom histograms, this consists of the type-id "custom", followed
+       a space delimited list of the bounds of the bins, from least to greatest.
+       @returns: The stringified version of the histogram.'''
+    def __str__(self):
+        return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
+# Create a shortname alias for CustomHistogram.
+c_hist = CustomHistogram;
+
+#==================================================================================================================
+progressStrings = [];
+progressLock = threading.Lock();
+
+def updateProgress(index, progress, maxProg=10, final=False):
+    print(str(index) + "\t:" + progress);
+    return;
+
+    '''
+    if(stdBuffer[0:20] == "Simulation Progress:"):
+        updateProgress(index, stdBuffer[21:-2]);
+    else:
+        print(str(index) + ":\t" + stdBuffer, end='');
+    '''
+
+    # If progress is an integer, convert it a progress bar.
+    try:
+        progress = int(progress) // 10;
+        progress = (u'\u2588' * progress) + ('_' * (maxProg - progress)) + "  (" + str(progress) + '/' + str(maxProg) + "/";
+    except ValueError:
+        pass;
+
+    progress = str(index) + ":    " + progress;
+    # Lock on the progress strings, and update the display.
+    try:
+        progressLock.acquire();
+        progressStrings[index] = progress;
+        lineLength = os.get_terminal_size()[0];
+        display = "";
+        # Pad every progress string to ensure it has just enough characters to wrap around to the next line.
+        for progStr in progressStrings:
+            display += progStr + (' ' * max(0, (lineLength - len(progStr))));
+
+        if(final):
+            # Print the display string with a newline, as this is the final progress display.
+            print(display, end='\r');
+        else:
+            # Print the display string with a carriage return, so we can overwrite the display at the next update.
+            print(display, end='\n');
+    finally:
+        progressLock.release();
+
+'''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
+def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, timestep=0.0005, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    global progressStrings;
+    i = 0;
+    args = [];
+    threads = [];
+
+    if not(predictorT):
+        predictorT = ThermalDensityPredictor(potential);
+    if not(predictorP):
+        predictorP = DoubleWellPersistentDensityPredictor(potential);
+
+    dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
+    if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
+        os.makedirs(outputFile[:dirIndex]);
+
+    progressStrings = ["***Allocating***"] * len(memory);
+    for m in memory:
+        d = np.sqrt(1 + (m**2));
+        duration = m * 10;
+        args.append([i, potential, predictorT, predictorP, outputFile + "t=" + str(m), posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, d, m, dataDelay, startBounds, activeForces, noise]);
+        thread = threading.Thread(target=runSimulation, args=args[i]);
+        threads.append(thread);
+        thread.start();
+        i += 1;
+
+    for j in range(i):
+        threads[j].join();
+
+    for j in range(i):
+        exportSimulation(*args[j]);
+        updateProgress(j, "Complete.\n");
+
+#TODO
+def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    updateProgress(index, "Initializing...\n");
+
+    # Create the command for running the simulation.
+    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " \"" + str(potential) + "\"";
+    if(outputFile):
+        command += " -of ";
+        if(outputFile[0] != "\""):
+            command += "\"";
+        command += str(outputFile);
+        if(outputFile[-1] != "\""):
+            command += "\"";
+    if(posRecorder):
+        command += " -pr " + str(posRecorder);
+    if(forceRecorder):
+        command += " -fr " + str(forceRecorder);
+    if(noiseRecorder):
+        command += " -nr " + str(noiseRecorder);
+    if(particleCount):
+        command += " -n " + str(particleCount);
+    if(duration):
+        command += " -t " + str(duration);
+    if(timestep):
+        command += " -dt " + str(timestep);
+    if(diffusion):
+        command += " -d " + str(diffusion);
+    if(memory):
+        command += " -m " + str(memory);
+    if(dataDelay):
+        command += " -dd " + str(dataDelay);
+    if(startBounds):
+        command += " -sb " + str(startBounds[0]) + " " + str(startBounds[1]);
+    if(activeForces):
+        command += " -af " + str(activeForces[0]) + " " + str(activeForces[1]);
+    if(noise):
+        command += " -no " + str(noise[0]) + " " + str(noise[1]);
+
+    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories) (ONLY IF IT'S NOT IN PARALLEL)
+    if(threading.current_thread() == threading.main_thread()):
+        dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
+        if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
+            os.makedirs(outputFile[:dirIndex]);
+
+    # Run the simulation.
+    updateProgress(index, "Running Simulation...\n");
+    with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
+        stdBuffer = "Simulation Progress: 0%\n";
+        while((stdBuffer != "") or (proc.poll() == None)):
+            if(stdBuffer):
+                updateProgress(index, stdBuffer);
+            stdBuffer = proc.stdout.readline();
+        updateProgress(index, "Simulation finished with exit code: " + str(proc.poll()) + '\n');
+        if(proc.poll() != 0):
+            raise sproc.CalledProcessError(proc.poll(), command);
+
+    # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
+    if(threading.current_thread() == threading.main_thread()):
+        return exportSimulation(index, potential, predictorT, predictorP, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
+    return 0;
+
+def exportSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
+    # Export the results.
+    updateProgress(index, "Exporting results...\n");
+    if(posRecorder):
+        updateProgress(index, "Generating prediction...\n");
+
+        n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
+        predictionT = predictorT.generateProfile(index, memory, diffusion);
+        predictionP = predictorP.generateProfile(index, memory, diffusion);
+        posXY = HistogramGroup(str(outputFile) + ".pos").interpolate();
+        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
+        ax = plt.gca();
+        ax.set_xlabel("position");
+        ax.set_ylabel("particle density");
+        ax.plot(X, predictionT(X), "green");
+        ax.plot(X, predictionP(X), "blue");
+        ax.plot(posXY[0], posXY[1], "red");
+        ax = ax.twinx();
+        ax.set_ylabel("potential");
+        ax.plot(X, potential(X), "black");
+
+        black = patches.Patch(color="black", label="potential");
+        green = patches.Patch(color="green", label="thermal");
+        blue = patches.Patch(color="blue", label="persistent");
+        red = patches.Patch(color="red", label="result");
+        plt.legend(handles=[black, green, blue, red], loc=1);
+
+        plt.savefig(str(outputFile) + "W.png", fmt=".png", dpi=200);
+        plt.close();
+    if(forceRecorder):
+        pass;#TODO
+    if(noiseRecorder):
+        pass;#TODO
+
+    return 0;
+
+#==================================================================================================================
 # ---FUNCTION CREATION--- TODO EVERYTHING UNDER THIS NEEDS BETTER COMMENTS
 
 '''
@@ -795,232 +1024,3 @@ def createSpline22010(a,b,fa,fb,f1a,f1b,f3a):
     c4 = (A0 * c) + (B0 * d) + f;
 
     return PolyFunc((c0,c1,c2,c3,c4));
-
-#==================================================================================================================
-#                                               ---HISTOGRAM TYPES---
-# Classes in this section are really just for nicely specifying the types of histograms to use. These are never used internally,
-# only stringified and passed along to the C++ side that runs the actual simulation.
-# There's two types of histograms currently supported by the C++ side:
-# - Linear All the bins are equally spaced over a specified range of values.
-# - Custom All the bins are specified by hand, in a single collection at initialization.
-# All histograms also have 'overflow' bins, which capture values outside the specified range the histograms cover. These
-# sit directly next to the ends of the range, and any values below or above the range go into that respective overflow bin.
-
-'''
-Class for specifying the parameters of a linear histogram.
-'''
-class LinearHistogram:
-    '''Creates a new linear histogram with the specified parameters.
-       @param minimum: The minimum value of data the histogram should track.
-       @param maximum: The maximum value of data the histogram should track.
-       @param dx: The spacing to place between consecutive bins. This is only used if the bin count isn't
-                  manually specified. (defaults to 0.1)
-       @param binCount: The number of bins the histogram should have. These are equally spaced throughout the range.
-                        If left as none, the bin count is computed using the bin density. (defaults to None)'''
-    def __init__(self, minimum, maximum, dx=0.1, binCount=None):
-        self.binMin = minimum;
-        self.binMax = maximum;
-        if(binCount):
-            self.dx = (maximum - minimum) / binCount;
-        else:
-            self.dx = dx;
-
-    '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
-       of the simulation, in a way that it can be properly parsed. For linear histograms, this consists of the type-id "linear", followed
-       by the minimum and maximum values of the range the histogram should expect data to be within, and the spacing interval to have
-       between consecutive bins dx.
-       @returns: The stringified version of the histogram.'''
-    def __str__(self):
-        return ("\"linear " + str(self.binMin) + " " + str(self.binMax) + " " + str(self.dx) + "\"");
-# Create a shortname alias for LinearHistogram.
-l_hist = LinearHistogram;
-
-'''
-Class for specifying the parameters of a custom binned histogram.
-'''
-class CustomHistogram:
-    '''Creates a new custom histogram with the specified bins.
-       @param bins: A collection containing the bounds of the histogram's bins, from lowest to highest.'''
-    def __init__(self, bins):
-        self.bins = bins;
-
-    '''Returns the string representation of the histogram. This stringifies the histogram, so it can be passed along to the C++ side
-       of the simulation, in a way that it can be properly parsed. For custom histograms, this consists of the type-id "custom", followed
-       a space delimited list of the bounds of the bins, from least to greatest.
-       @returns: The stringified version of the histogram.'''
-    def __str__(self):
-        return ("\"custom " + " ".join(map(str, self.bins)) + " \"");
-# Create a shortname alias for CustomHistogram.
-c_hist = CustomHistogram;
-
-#==================================================================================================================
-progressStrings = [];
-progressLock = threading.Lock();
-
-def updateProgress(index, progress, maxProg=10, final=False):
-    print(str(index) + "\t:" + progress);
-    return;
-
-    '''
-    if(stdBuffer[0:20] == "Simulation Progress:"):
-        updateProgress(index, stdBuffer[21:-2]);
-    else:
-        print(str(index) + ":\t" + stdBuffer, end='');
-    '''
-
-    # If progress is an integer, convert it a progress bar.
-    try:
-        progress = int(progress) // 10;
-        progress = (u'\u2588' * progress) + ('_' * (maxProg - progress)) + "  (" + str(progress) + '/' + str(maxProg) + "/";
-    except ValueError:
-        pass;
-
-    progress = str(index) + ":    " + progress;
-    # Lock on the progress strings, and update the display.
-    try:
-        progressLock.acquire();
-        progressStrings[index] = progress;
-        lineLength = os.get_terminal_size()[0];
-        display = "";
-        # Pad every progress string to ensure it has just enough characters to wrap around to the next line.
-        for progStr in progressStrings:
-            display += progStr + (' ' * max(0, (lineLength - len(progStr))));
-
-        if(final):
-            # Print the display string with a newline, as this is the final progress display.
-            print(display, end='\r');
-        else:
-            # Print the display string with a carriage return, so we can overwrite the display at the next update.
-            print(display, end='\n');
-    finally:
-        progressLock.release();
-
-'''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
-def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, timestep=0.0005, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    global progressStrings;
-    i = 0;
-    args = [];
-    threads = [];
-
-    if not(predictorT):
-        predictorT = ThermalDensityPredictor(potential);
-    if not(predictorP):
-        predictorP = DoubleWellPersistentDensityPredictor(potential);
-
-    dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
-    if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
-        os.makedirs(outputFile[:dirIndex]);
-
-    progressStrings = ["***Allocating***"] * len(memory);
-    for m in memory:
-        d = np.sqrt(1 + (m**2));
-        duration = m * 10;
-        args.append([i, potential, predictorT, predictorP, outputFile + "t=" + str(m), posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, d, m, dataDelay, startBounds, activeForces, noise]);
-        thread = threading.Thread(target=runSimulation, args=args[i]);
-        threads.append(thread);
-        thread.start();
-        i += 1;
-
-    for j in range(i):
-        threads[j].join();
-
-    for j in range(i):
-        exportSimulation(*args[j]);
-        updateProgress(j, "Complete.\n");
-
-#TODO
-def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    updateProgress(index, "Initializing...\n");
-
-    # Create the command for running the simulation.
-    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " \"" + str(potential) + "\"";
-    if(outputFile):
-        command += " -of ";
-        if(outputFile[0] != "\""):
-            command += "\"";
-        command += str(outputFile);
-        if(outputFile[-1] != "\""):
-            command += "\"";
-    if(posRecorder):
-        command += " -pr " + str(posRecorder);
-    if(forceRecorder):
-        command += " -fr " + str(forceRecorder);
-    if(noiseRecorder):
-        command += " -nr " + str(noiseRecorder);
-    if(particleCount):
-        command += " -n " + str(particleCount);
-    if(duration):
-        command += " -t " + str(duration);
-    if(timestep):
-        command += " -dt " + str(timestep);
-    if(diffusion):
-        command += " -d " + str(diffusion);
-    if(memory):
-        command += " -m " + str(memory);
-    if(dataDelay):
-        command += " -dd " + str(dataDelay);
-    if(startBounds):
-        command += " -sb " + str(startBounds[0]) + " " + str(startBounds[1]);
-    if(activeForces):
-        command += " -af " + str(activeForces[0]) + " " + str(activeForces[1]);
-    if(noise):
-        command += " -no " + str(noise[0]) + " " + str(noise[1]);
-
-    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories) (ONLY IF IT'S NOT IN PARALLEL)
-    if(threading.current_thread() == threading.main_thread()):
-        dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
-        if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
-            os.makedirs(outputFile[:dirIndex]);
-
-    # Run the simulation.
-    updateProgress(index, "Running Simulation...\n");
-    with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
-        stdBuffer = "Simulation Progress: 0%\n";
-        while((stdBuffer != "") or (proc.poll() == None)):
-            if(stdBuffer):
-                updateProgress(index, stdBuffer);
-            stdBuffer = proc.stdout.readline();
-        updateProgress(index, "Simulation finished with exit code: " + str(proc.poll()) + '\n');
-        if(proc.poll() != 0):
-            raise sproc.CalledProcessError(proc.poll(), command);
-
-    # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
-    if(threading.current_thread() == threading.main_thread()):
-        return exportSimulation(index, potential, predictorT, predictorP, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
-    return 0;
-
-def exportSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    # Export the results.
-    updateProgress(index, "Exporting results...\n");
-    if(posRecorder):
-        updateProgress(index, "Generating prediction...\n");
-
-        n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
-        predictionT = predictorT.generateProfile(index, memory, diffusion);
-        predictionP = predictorP.generateProfile(index, memory, diffusion);
-        posXY = HistogramGroup(str(outputFile) + ".pos").interpolate();
-        X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
-        ax = plt.gca();
-        ax.set_xlabel("position");
-        ax.set_ylabel("particle density");
-        ax.plot(X, predictionT(X), "green");
-        ax.plot(X, predictionP(X), "blue");
-        ax.plot(posXY[0], posXY[1], "red");
-        ax = ax.twinx();
-        ax.set_ylabel("potential");
-        ax.plot(X, potential(X), "black");
-
-        black = patches.Patch(color="black", label="potential");
-        green = patches.Patch(color="green", label="thermal");
-        blue = patches.Patch(color="blue", label="persistent");
-        red = patches.Patch(color="red", label="result");
-        plt.legend(handles=[black, green, blue, red], loc=1);
-
-        plt.savefig(str(outputFile) + "W.png", fmt=".png", dpi=200);
-        plt.close();
-    if(forceRecorder):
-        pass;#TODO
-    if(noiseRecorder):
-        pass;#TODO
-
-    return 0;
