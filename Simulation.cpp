@@ -152,6 +152,13 @@ function::Function* createFunction(const std::string& str)
         std::transform((paramVector.begin() + 1), paramVector.end(), coeffecients.begin(), [](const std::string& str) {return std::stod(str);});
         return new function::PolyFunction(coeffecients);
     } else
+    if(paramVector[0] == "periodic")
+    {
+        // Parse the generator function.
+        function::Function* generator = createFunction(paramVector[1]);
+
+        return new function::PeriodicFunction(generator, std::stod(paramVector[2]), std::stod(paramVector[3]));
+    } else
     if(paramVector[0] == "piece")
     {
         // Allocate vectors for storing the piecewise function's parameters.
@@ -230,7 +237,7 @@ histogram::Recorder* createRecorder(const std::string& str)
  * single quotes, with sub parameters being space delimited within said quotes.
  *
  * The following is a complete list of the simulation parameters:
- * The first parameter is always the potential.
+ * The first parameter is always the potential. (NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE FUNCTIONS! TODO?)
  * outputFile    (of): The file name to save results to. NOTE, this should NOT include an extension, as separate extensions
  *                         are used for different data types, all of which are generated automatically and internally.
  * posRecorder   (pr): Stringified representation of the recorder to use for tracking particle positions over time.
