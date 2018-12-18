@@ -37,7 +37,7 @@ namespace function
 
     PolyFunction* PolyFunction::negate() const
     {
-        std::vector<double> parameters(coefficients.size());
+        std::vector<double> parameters;
         for(const auto& coefficient : coefficients)
         {
             parameters.push_back(-coefficient);
@@ -50,7 +50,7 @@ namespace function
         std::vector<double> parameters(coefficients.size() - 1);
         for(int i = 1; i < coefficients.size(); i++)
         {
-            parameters.push_back(i * coefficients[i]);
+            parameters[i - 1] = (i * coefficients[i]);
         }
         return new PolyFunction(parameters);
     }
@@ -58,10 +58,10 @@ namespace function
     PolyFunction* PolyFunction::integrateI(double c) const
     {
         std::vector<double> parameters(coefficients.size() + 1);
-        parameters.push_back(c);
+        parameters[0] = c;
         for(int i = 0; i < coefficients.size(); i++)
         {
-            parameters.push_back(coefficients[i] / (i + 1));
+            parameters[i + 1] = (coefficients[i] / (i + 1));
         }
         return (new PolyFunction(parameters));
     }
@@ -152,7 +152,7 @@ namespace function
 
     PieceFunction* PieceFunction::negate() const
     {
-        std::vector<Function*> newFunctions(functions.size());
+        std::vector<Function*> newFunctions;
         for(const Function* function : functions)
         {
             newFunctions.push_back(function->negate());
@@ -166,7 +166,7 @@ namespace function
     // the derivative of the function that is evaulated at the boundary instead. TODO
     PieceFunction* PieceFunction::derivative() const
     {
-        std::vector<Function*> newFunctions(functions.size());
+        std::vector<Function*> newFunctions;
         for(const Function* function : functions)
         {
             newFunctions.push_back(function->derivative());
