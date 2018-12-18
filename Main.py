@@ -284,7 +284,7 @@ class HistogramGroup:
         Y = self.data[index][1:-1];
         # If data was pulled from multiple histograms, average the data together.
         if(Y.ndim > 1):
-            Y = np.sum(Y) / Y.shape[0];
+            Y = np.sum(Y, axis=0) / Y.shape[0];
         if(normalize):
             # Compute the normalization constant by taking the integral over the function with the trapazoidal algorithm.
             normalization = np.trapz(Y, dx=(self.bins[1] - self.bins[0]));
@@ -302,7 +302,7 @@ class HistogramGroup:
         Y = self.data[index];
         # If data was pulled from multiple histograms, average them together.
         if(Y.ndim > 1):
-            Y = np.sum(Y) / Y.shape[0];
+            Y = np.sum(Y, axis=0) / Y.shape[0];
         if(normalize):
             # Compute the normalization constant by integrating the data with the trapazoidal algorithm.
             normalization = np.trapz(Y, dx=(self.bins[1] - self.bins[0]));
@@ -352,7 +352,7 @@ class BarGraphAnimator:
     '''Internal function for generating animation frames out of histograms.
        @param index: The index of the histogram to generate the frame from.'''
     def animate(self, index):
-        self.top = self.histograms.fetchBins(list(range(max(0, (index - self.smoothing)), min(len(self.histograms[0]), (index + self.smoothing)))))[1:-1];
+        self.top = self.histograms.fetchBins(list(range(max(0, (index - self.smoothing)), min(len(self.histograms.data), (index + self.smoothing + 1)))))[1:-1];
         self.vertices[1::5, 1] = self.top;
         self.vertices[2::5, 1] = self.top;
         self.fig.suptitle("Time = " + str(self.histograms.times[index]) + "s");
