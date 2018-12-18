@@ -255,6 +255,12 @@ p_pred = PersistentDensityPredictor;
 
 
 
+# Dictionary of all the predictors. This is used for parsing stringified versions of predictors.
+predictorsDict = {"thermaldensitypredictor":ThermalDensityPredictor, "t_pred":ThermalDensityPredictor, "thermal":ThermalDensityPredictor,
+                  "singlewellpersistentdensitypredictor":SingleWellPersistentDensityPredictor, "swp_pred":SingleWellPersistentDensityPredictor, "singlewellpersistent":SingleWellPersistentDensityPredictor,
+                  "doublewellpersistentdensitypredictor":DoubleWellPersistentDensityPredictor, "dwp_pred":DoubleWellPersistentDensityPredictor, "doublewellpersistent":DoubleWellPersistentDensityPredictor,
+                  "persistentdensitypredictor":PersistentDensityPredictor, "p_pred":PersistentDensityPredictor, "persistent":PersistentDensityPredictor};
+
 #==================================================================================================================
 #                                              ---DATA VISUALIZATION---
 # The classes in this section provide utilities for handling and visualizing data. Principally it contains a class for generating
@@ -386,6 +392,9 @@ class BarGraphAnimator:
 # Create a shortname alias for BarGraphAnimator.
 bg_anim = BarGraphAnimator;
 
+# Dictionary of all the animators. This is used for parsing stringified versions of animators.
+animatorsDict = {"bargraphanimator":BarGraphAnimator, "bg_anim":BarGraphAnimator, "bargraph":BarGraphAnimator};
+
 #==================================================================================================================
 #                                               ---HISTOGRAM TYPES---
 # Classes in this section are really just for nicely specifying the types of histograms to use. These are never used internally,
@@ -443,7 +452,13 @@ class CustomHistogram:
 # Create a shortname alias for CustomHistogram.
 c_hist = CustomHistogram;
 
+# Dictionary of all the histograms. This is used for parsing stringified versions of histograms.
+animatorsDict = {"linearhistogram":LinearHistogram, "l_hist":LinearHistogram, "linear":LinearHistogram,
+                 "customhistogram":CustomHistogram, "c_hist":CustomHistogram, "custom":CustomHistogram};
+
 #==================================================================================================================
+#                                           ---SIMULATION EXECUTION---
+# Code in this section is used to create, execute, and generally manage simulations.
 progressStrings = [];
 progressLock = threading.Lock();
 
