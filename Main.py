@@ -7,7 +7,9 @@ import copy as cp;
 import numpy as np;
 import scipy as sp;
 import subprocess as sproc;
+import inspect;
 import os;
+import shlex;
 import threading;
 
 #==================================================================================================================
@@ -116,6 +118,7 @@ class DoubleWellPersistentDensityPredictor:
             raise ValueError("Failed to locate slope matching C. Expected location was A=" + str(self.A));
         if(np.abs(self.dU(self.D) - self.dU(self.B)) > 0.001):
             raise ValueError("Failed to locate slope matching B. Expected location was D=" + str(self.D));
+
 
     '''Generates the prediction profile as a normalized density distribution.
        @param index: The index of the simulation, for logging purposes. This should be an integer, but can actually be anything.
@@ -242,7 +245,7 @@ class PersistentDensityPredictor:
             # and describe the density in the following concave region.
             b0 = 1 if j==Nc-1 else 0
             if sp.absolute(vals[-1][0])>1e-4 or sp.absolute(vals[-1][1]-b0)>1e-4:
-                updateProgress(index, "There are numerical precision issues.\n");
+                updateStatus("There are numerical precision issues.\n", index);
         bins.append(sp.inf);
 
         return lambda x: self.p(x, memory, diffusion, E, sp.array(bins), sp.array(vals), (sp.sqrt(memory/(2*sp.pi*diffusion))), (-memory / (2 * diffusion)))
@@ -252,8 +255,6 @@ class PersistentDensityPredictor:
         return self.d2U_(x)*q0*(a*E(self.dU_(x))+b)*sp.exp(q1*self.dU_(x)**2);
 # Create a shortname alias for PersistentDensityPredictor.
 p_pred = PersistentDensityPredictor;
-
-
 
 # Dictionary of all the predictors. This is used for parsing stringified versions of predictors.
 predictorsDict = {"thermaldensitypredictor":ThermalDensityPredictor, "t_pred":ThermalDensityPredictor, "thermal":ThermalDensityPredictor,
@@ -459,88 +460,278 @@ animatorsDict = {"linearhistogram":LinearHistogram, "l_hist":LinearHistogram, "l
 #==================================================================================================================
 #                                           ---SIMULATION EXECUTION---
 # Code in this section is used to create, execute, and generally manage simulations.
-progressStrings = [];
-progressLock = threading.Lock();
 
-def updateProgress(index, progress, maxProg=10, final=False):
-    print(str(index) + "\t:" + progress);
-    return;
-
-    '''
-    if(stdBuffer[0:20] == "Simulation Progress:"):
-        updateProgress(index, stdBuffer[21:-2]);
+'''TODO make this method do fancier stuff!'''
+def updateStatus(status, index=-1):
+    if(index == -1):
+        print(status, end='');
     else:
-        print(str(index) + ":\t" + stdBuffer, end='');
-    '''
+        print(str(index) + ":\t" + str(status), end='');
 
-    # If progress is an integer, convert it a progress bar.
-    try:
-        progress = int(progress) // 10;
-        progress = (u'\u2588' * progress) + ('_' * (maxProg - progress)) + "  (" + str(progress) + '/' + str(maxProg) + "/";
-    except ValueError:
-        pass;
+'''TODO COMMENTS'''
+def decodeHistogram(params, name):
+    params = params.split();
+    if(len(params) == 0):
+        raise ValueError("Missing histogram type for " + name + ". Usage:\n    " + name + " <type> <parameters...>");
+    # Convert the histogram identifier to lowercase for parsing.
+    params[0] = params[0].lower();
+    if(params[0] == "linear"):
+        if(len(params) > 5):
+            raise ValueError("Too many arguments passed for linear histogram. Expected 3, received " + (len(params) - 1));
+        return LinearHistogram(*tuple(map(float, params[1:4])));
+    elif(params[0] == "custom"):
+        if(len(params) < 4):
+            print("Warning " + name + ": Having less than 2 bins in a custom histogram can cause recording instability.");
+        return CustomHistogram(tuple(map(float, params[1:])));
 
-    progress = str(index) + ":    " + progress;
-    # Lock on the progress strings, and update the display.
-    try:
-        progressLock.acquire();
-        progressStrings[index] = progress;
-        lineLength = os.get_terminal_size()[0];
-        display = "";
-        # Pad every progress string to ensure it has just enough characters to wrap around to the next line.
-        for progStr in progressStrings:
-            display += progStr + (' ' * max(0, (lineLength - len(progStr))));
+'''TODO COMMENTS'''
+def decodePotential(params):
+    params = params.split();
+    if(len(params) == 0):
+        raise ValueError("Missing potential type. Usage:\n   potential <type> <parameters...>");
+    # Convert the potential identifier to lowercase for parsing.
+    params[0] = params[0].lower();
+    return PolyFunc([0, 0, 1]);
 
-        if(final):
-            # Print the display string with a newline, as this is the final progress display.
-            print(display, end='\r');
-        else:
-            # Print the display string with a carriage return, so we can overwrite the display at the next update.
-            print(display, end='\n');
-    finally:
-        progressLock.release();
+'''TODO COMMENTS'''
+def decodePrediction(params, potential):
+    params = params.split();
+    if(len(params) == 0):
+        raise ValueError("Missing potential type. Usage:\n   potential <type> <parameters...>");
+    # Convert the potential identifier to lowercase for parsing.
+    params[0] = params[0].lower();
+    if(params[0] == "thermal"):
+        if(len(params) > 4):
+            raise ValueError("Too many arguments passed for thermal predictor. Expected 3, received " + (len(params) - 1));
+        return ThermalDensityPredictor(potential, *tuple(map(float, params[1:4])));
+    elif(params[0] == "singlewellpersistent"):
+        if(len(params) > 1):
+            raise ValueError("Too many arguments passed for single well persistent predictor. Expected 0, received " + (len(params) - 1));
+        return SingleWellPersistentDensityPredictor(potential);
+    elif(params[0] == "doublewellpersistent"):
+        if(len(params) > 4):
+            raise ValueError("Too many arguments passed for double well persistent predictor. Expected 3, received " + (len(params) - 1));
+        return DoubleWellPersistentDensityPredictor(potential, *tuple(map(float, params[1:4])));
+    elif(params[0] == "persistent"):
+        if(len(params) > 4):
+            raise ValueError("Too many arguments passed for persistent predictor. Expected 3, received " + (len(params) - 1));
+        return PersistentDensityPredictor(potential, *tuple(map(float, params[1:4])));
 
-'''Memmory MUST BE A COLLECTION (preferably list)''' #TODO
-def runSimulationTEMP(potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, timestep=0.0005, memory=[1], dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    global progressStrings;
-    i = 0;
-    args = [];
-    threads = [];
+'''TODO COMMENTS'''
+def runFromFile(file):
+    # Assign default values for all the parameters. (these must mirror the ones in the C++ side)
+    potential = [None];
+    outputFile = ["./results"];
+    posRecorder = [None];
+    forceRecorder = [None];
+    noiseRecorder = [None];
+    particleCount = [100];
+    duration = [20];
+    timestep = [0.05];
+    diffusion = [1];
+    memory = [1];
+    dataDelay = [10];
+    startBoundLeft = [-5];
+    startBoundRight = [5];
+    activeForcesMean = [0];
+    activeForcesStddev = [0.2];
+    noiseMean = [0];
+    noiseStddev = [1];
+    predictions = [None];
+    # This parameter is only used by the Python wrapper.
+    maxThreadCount = 1;
 
-    if not(predictorT):
-        predictorT = ThermalDensityPredictor(potential);
-    if not(predictorP):
-        predictorP = DoubleWellPersistentDensityPredictor(potential);
+    # List of flags for storing whether variables have already been set. Used for throwing warnings when parameters are set twice.
+    setFlags = [False] * 19;
 
-    dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
-    if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
-        os.makedirs(outputFile[:dirIndex]);
+    # Parse the parameter file line by line.
+    with open(file) as file:
+        for line in file:
+            # Ignore comment lines starting with an '#' symbol.
+            if(line.startswith('#')):
+                continue;
+            params = shlex.split(line);
+            if(len(params) == 0):
+                print("No parameters detected. Consult the Readme for instructions on using parameter files.");
+                break;
+            # Convert the parameter identifier to lowercase for parsing.
+            params[0] = params[0].lower();
+            if(params[0] == "potential"):
+                potential = [decodePotential(p) for p in params[1:]];
+                if(setFlags[0]):
+                    print("Warning: potential was set multiple times.");
+                else:
+                    setFlags[0] = True;
+            elif(params[0] == "outputfile"):
+                outputFile = [s.strip() for s in params[1:]];
+                if(setFlags[1]):
+                    print("Warning: outputFile was set multiple times.");
+                else:
+                    setFlags[1] = True;
+            elif(params[0] == "posrecorder"):
+                posRecorder = [decodeHistogram(p, "posRecorder") for p in params[1:]];
+                if(setFlags[2]):
+                    print("Warning: posRecorder was set multiple times.");
+                else:
+                    setFlags[2] = True;
+            elif(params[0] == "forcerecorder"):
+                forceRecorder = [decodeHistogram(p, "forceRecorder") for p in params[1:]];
+                if(setFlags[3]):
+                    print("Warning: forceRecorder was set multiple times.");
+                else:
+                    setFlags[3] = True;
+            elif(params[0] == "noiserecorder"):
+                noiseRecorder = [decodeHistogram(p, "noiseRecorder") for p in params[1:]];
+                if(setFlags[4]):
+                    print("Warning: noiseRecorder was set multiple times.");
+                else:
+                    setFlags[4] = True;
+            elif(params[0] == "particlecount"):
+                particleCount = tuple(map(int, params[1:]));
+                if(setFlags[5]):
+                    print("Warning: particleCount was set multiple times.");
+                else:
+                    setFlags[5] = True;
+            elif(params[0] == "duration"):
+                duration = tuple(map(float, params[1:]));
+                if(setFlags[6]):
+                    print("Warning: duration was set multiple times.");
+                else:
+                    setFlags[6] = True;
+            elif(params[0] == "timestep"):
+                timestep = tuple(map(float, params[1:]));
+                if(setFlags[7]):
+                    print("Warning: timestep was set multiple times.");
+                else:
+                    setFlags[7] = True;
+            elif(params[0] == "diffusion"):
+                diffusion = tuple(map(float, params[1:]));
+                if(setFlags[8]):
+                    print("Warning: diffusion was set multiple times.");
+                else:
+                    setFlags[8] = True;
+            elif(params[0] == "memory"):
+                memory = tuple(map(float, params[1:]));
+                if(setFlags[9]):
+                    print("Warning: memory was set multiple times.");
+                else:
+                    setFlags[9] = True;
+            elif(params[0] == "datadelay"):
+                dataDelay = tuple(map(float, params[1:]));
+                if(setFlags[10]):
+                    print("Warning: dataDelay was set multiple times.");
+                else:
+                    setFlags[10] = True;
+            elif(params[0] == "startboundleft"):
+                startBoundLeft = tuple(map(float, params[1:]));
+                if(setFlags[11]):
+                    print("Warning: startBoundLeft was set multiple times.");
+                else:
+                    setFlags[0] = True;
+            elif(params[0] == "startboundright"):
+                startBoundRight = tuple(map(float, params[1:]));
+                if(setFlags[12]):
+                    print("Warning: startBoundRight was set multiple times.");
+                else:
+                    setFlags[12] = True;
+            elif(params[0] == "activeforcesmean"):
+                activeForcesMean = tuple(map(float, params[1:]));
+                if(setFlags[13]):
+                    print("Warning: activeForcesMean was set multiple times.");
+                else:
+                    setFlags[13] = True;
+            elif(params[0] == "activeforcesstddev"):
+                activeForcesStddev = tuple(map(float, params[1:]));
+                if(setFlags[14]):
+                    print("Warning: activeForcesStddev was set multiple times.");
+                else:
+                    setFlags[14] = True;
+            elif(params[0] == "noisemean"):
+                noiseMean = tuple(map(float, params[1:]));
+                if(setFlags[15]):
+                    print("Warning: noiseMean was set multiple times.");
+                else:
+                    setFlags[15] = True;
+            elif(params[0] == "noisestddev"):
+                noiseStddev = tuple(map(float, params[1:]));
+                if(setFlags[16]):
+                    print("Warning: noiseStddev was set multiple times.");
+                else:
+                    setFlags[16] = True;
+            elif(params[0] == "maxthreadcount"):
+                if(len(params) != 2):
+                    raise ValueError("MaxThreadCount can only take one value, however " + str(len(params) - 1) + " were given.");
+                maxThreadCount = int(params[1]);
+                if(setFlags[17]):
+                    print("Warning: maxThreadCount was set multiple times.");
+                else:
+                    setFlags[17] = True;
+            elif(params[0] == "predictions"):
+                predictions = [[decodePrediction(params[i+1], potential[min((len(potential)-1), i)]) for i in range(len(params)-1)]];
+                if(setFlags[18]):
+                    print("Warning: Predictions was set multiple times.");
+                else:
+                    setFlags[18] = True;
+            else:
+                raise ValueError("Unknown parameter: " + params[0]);
 
-    progressStrings = ["***Allocating***"] * len(memory);
-    for m in memory:
-        d = np.sqrt(1 + (m**2));
-        duration = m * 10;
-        args.append([i, potential, predictorT, predictorP, outputFile + "t=" + str(m), posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, d, m, dataDelay, startBounds, activeForces, noise]);
-        thread = threading.Thread(target=runSimulation, args=args[i]);
-        threads.append(thread);
-        thread.start();
-        i += 1;
+    if(not potential):
+        raise ValueError("Cannot run simulation with an unspecified potential.");
+    return runSimulationMulti(potential, outputFile, predictions, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, list(zip(startBoundLeft, startBoundRight)), list(zip(activeForcesMean, activeForcesStddev)), list(zip(noiseMean, noiseStddev)), maxThreadCount);
 
-    for j in range(i):
-        threads[j].join();
+'''TODO COMMENTS'''
+def runSimulationMulti(potential, outputFile=["result"], predictions=[None], posRecorder=[None], forceRecorder=[None], noiseRecorder=[None], particleCount=[100], duration=[20], timestep=[0.05], diffusion=[1], memory=[1], dataDelay=[10], startBounds=[(-5,5)], activeForces=[(0,0.2)], noise=[(0,1)], maxThreadCount=0):
+    args = [potential, outputFile, predictions, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise];
+    names = ["potential", "outputFile", "predictions", "posRecorder", "forceRecorder", "noiseRecorder", "particleCount", "duration", "timestep", "diffusion", "memory", "dataDelay", "startBounds", "activeForces", "noise"];
+    simCount = max(*[len(arg) for arg in args]);
+    for i in range(len(args)):
+        length = len(args[i]);
+        if(length == 1):
+            args[i] = args[i] * simCount;
+        elif(length != simCount):
+            raise ValueError("Argument lists must all be the same size. " + names[i] + " was only " + str(length) + " long, when " + str(simCount) + " was expected.");
 
-    for j in range(i):
-        exportSimulation(*args[j]);
-        updateProgress(j, "Complete.\n");
+    if(simCount < 1):
+        print("No simulations to run... Exiting.");
+    elif(simCount == 1):
+        runSimulation(*[args[j][0] for j in range(len(args))]);
+    else:
+        # If the user specified 0 for maxThreadCount, change it to run one thread per processor.
+        if(maxThreadCount == 0):
+            maxThreadCount = os.cpu_count();
+        index = 0;
+        completed = 0;
+        finished = [];
+        threads = [];
+        params = [];
+        simLock = threading.Condition(threading.RLock());
+        with simLock:
+            while(completed < simCount):
+                if((index < simCount) and ((len(threads) - completed) < maxThreadCount)):
+                    params.append([args[j][index] for j in range(len(args))]);
+                    threads.append(threading.Thread(target=runSimulation, args=[*params[-1], index, finished, simLock]));
+                    threads[-1].start();
+                    index += 1;
+                elif(len(finished) > 0):
+                    i = finished.pop(0);
+                    threads[i].join();
+                    exportResults(*params[i], i);
+                    completed += 1;
+                else:
+                    simLock.wait(10);
 
-#TODO
-def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    updateProgress(index, "Initializing...\n");
+'''TODO COMMENTS'''
+def runSimulation(potential, outputFile="result", predictions=None, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=100, duration=20, timestep=0.05, diffusion=1, memory=1, dataDelay=10, startBounds=(-5,5), activeForces=(0,0.2), noise=(0,1), index=-1, finished=None, simLock=None):
+    updateStatus("Initializing...\n", index);
 
-    # Create the command for running the simulation.
-    command = str(os.path.abspath(os.path.join(__file__, "../simulate"))) + " \"" + str(potential) + "\"";
+    # Get the current directory of the program.
+    progDir = str(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))));
+
+    # Build a command to run the simulation on the C++ side.
+    command = progDir + "/simulate.exe " + str(potential);
     if(outputFile):
         command += " -of ";
+        # Ensure that the file path is wrapped in quotes if it isn't already.
         if(outputFile[0] != "\""):
             command += "\"";
         command += str(outputFile);
@@ -571,64 +762,76 @@ def runSimulation(index, potential, predictorT=None, predictorP=None, outputFile
     if(noise):
         command += " -no " + str(noise[0]) + " " + str(noise[1]);
 
-    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories) (ONLY IF IT'S NOT IN PARALLEL)
-    if(threading.current_thread() == threading.main_thread()):
-        dirIndex = max(outputFile.rfind('/'), outputFile.rfind('\\'));
-        if((dirIndex > -1) and not os.path.exists(outputFile[:dirIndex])):
-            os.makedirs(outputFile[:dirIndex]);
+    # Create the output directory if it doesn't exist (C++ can't export to non-existant directories)
+    outputDir = progDir + "/" + str(os.path.dirname(outputFile));
+    if(not os.path.exists(outputDir)):
+        updateStatus("Creating output directory: " + outputDir + '\n', index);
+        # If this is being run in parallel, synchronize on simLock to avoid multiple runs trying to create the same directory.
+        if(simLock):
+            with(simLock):
+                if(not os.path.exists(outputDir)):
+                    os.makedirs(outputDir);
+        else:
+            os.makedirs(outputDir);
 
-    # Run the simulation.
-    updateProgress(index, "Running Simulation...\n");
+    # Run the simulaion.
+    updateStatus("Running Simulation...\n", index);
     with sproc.Popen(command, stdout=sproc.PIPE, stderr=sproc.STDOUT, bufsize=1, universal_newlines=True) as proc:
         stdBuffer = "Simulation Progress: 0%\n";
         while((stdBuffer != "") or (proc.poll() == None)):
             if(stdBuffer):
-                updateProgress(index, stdBuffer);
+                updateStatus(stdBuffer, index);
             stdBuffer = proc.stdout.readline();
-        updateProgress(index, "Simulation finished with exit code: " + str(proc.poll()) + '\n');
+        updateStatus("Simulation finished with exit code: " + str(proc.poll()) + '\n', index);
         if(proc.poll() != 0):
             raise sproc.CalledProcessError(proc.poll(), command);
 
-    # Check if this is running in the main thread. If it is, then it's safe to export the results, if not, it's probably being run in parallel.
-    if(threading.current_thread() == threading.main_thread()):
-        return exportSimulation(index, potential, predictorT, predictorP, outputFile, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
-    return 0;
+    if(simLock):
+        # If this is part of a parallel run, notify the main thread that this simulation has finished.
+        with(simLock):
+            finished.append(index);
+            simLock.notifyAll();
+        return 0;
+    else:
+        # If this is a stand-alone run, export the results.
+        return exportResults(potential, outputFile, predictions, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
 
-def exportSimulation(index, potential, predictorT=None, predictorP=None, outputFile="./result", posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=None, duration=None, timestep=None, diffusion=1, memory=1, dataDelay=None, startBounds=None, activeForces=None, noise=None):
-    # Export the results.
-    updateProgress(index, "Exporting results...\n");
+'''TODO COMMENTS'''
+def exportResults(potential, outputFile, predictors, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise, index=-1):
+    updateStatus("Exporting results...\n", index);
     if(posRecorder):
-        updateProgress(index, "Generating prediction...\n");
-
         n = ((posRecorder.binMax - posRecorder.binMin) / posRecorder.dx) * 100;
-        predictionT = predictorT.generateProfile(index, memory, diffusion);
-        predictionP = predictorP.generateProfile(index, memory, diffusion);
-        posXY = HistogramGroup(str(outputFile) + ".pos").interpolate();
         X = sp.linspace(posRecorder.binMin, posRecorder.binMax, n);
         ax = plt.gca();
         ax.set_xlabel("position");
         ax.set_ylabel("particle density");
-        ax.plot(X, predictionT(X), "green");
-        ax.plot(X, predictionP(X), "blue");
+        legend = [];
+
+        # Create the prediction profiles.
+        predictions = [predictor.generateProfile(index, memory, diffusion) for predictor in predictors];
+        for i in range(len(predictions)):
+            ax.plot(X, predictions[i](X), predictors[i].color);
+            legend.append(patches.Patch(color=predictors[i].color, label=predictors[i].name));
+
+        # Create the results profile.
+        posXY = HistogramGroup(str(outputFile) + ".pos").interpolate();
         ax.plot(posXY[0], posXY[1], "red");
+        legend.append(patches.Patch(color="red", label="result"));
+
         ax = ax.twinx();
+
+        # Create the potential profile.
         ax.set_ylabel("potential");
         ax.plot(X, potential(X), "black");
+        legend.append(patches.Patch(color="black", label="potential"));
 
-        black = patches.Patch(color="black", label="potential");
-        green = patches.Patch(color="green", label="thermal");
-        blue = patches.Patch(color="blue", label="persistent");
-        red = patches.Patch(color="red", label="result");
-        plt.legend(handles=[black, green, blue, red], loc=1);
-
-        plt.savefig(str(outputFile) + "W.png", fmt=".png", dpi=200);
+        plt.legend(handles=legend, loc=1);
+        plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=200);
         plt.close();
     if(forceRecorder):
         pass;#TODO
     if(noiseRecorder):
         pass;#TODO
-
-    return 0;
 
 #==================================================================================================================
 # ---FUNCTION CREATION--- TODO EVERYTHING UNDER THIS NEEDS BETTER COMMENTS
@@ -647,7 +850,7 @@ class PolyFunc:
         return len(self.c);
 
     def __str__(self):
-        return ("poly " + str(self.c)[1:-1]);
+        return ("\"poly " + str(self.c)[1:-1] + '\"');
 
     def __call__(self, x):
         if((type(x) != np.ndarray) or (x.ndim == 0)):
