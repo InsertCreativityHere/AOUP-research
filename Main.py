@@ -384,7 +384,7 @@ class BarGraphAnimator:
     @param smoothing: The number of neighbors in each direction to average each histogram's data with to produce smoother data.
                       If 0, then no averaging occurs. (defaults to 0)
     @param step: The number of histograms to skip between each frame. (defaults to 0)'''
-    def viewHistogram(filePath, smoothing=0, repeat=False, step=0):
+    def viewFromFile(filePath, smoothing=0, repeat=False, step=0):
         histograms = HistogramGroup(filePath);
         animator = BarGraphAnimator(histograms, smoothing);
         ani = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histograms.data), (step + 1)), repeat=repeat);
