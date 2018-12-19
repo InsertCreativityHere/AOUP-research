@@ -120,7 +120,7 @@ void runSimulation(function::Function* force, histogram::Recorder* posRecorder, 
 /**
  * Creates a function from it's stringified representation. In general these look like:
  *     <type> <param1 param2 param3...>
- * Where type is the function type, currently only the following function types are supported:
+ * Where type is the function type, currently only the following types are supported:
  *     "poly" = A polynomial function, where parameters is a list of coeffecients in ascending order.
  *     "piece" = A piecewise function made of multiple component functions.
  * The additional parameters must be separated by only whitespace, and are passed directly into the
@@ -143,7 +143,6 @@ function::Function* createFunction(const std::string& str)
 
     // Convert the first parameter (function type) to  lowercase.
     std::transform(paramVector[0].begin(), paramVector[0].end(), paramVector[0].begin(), tolower);
-
     // Create the specified function with it's provided parameters.
     if(paramVector[0] == "poly")
     {
@@ -156,7 +155,6 @@ function::Function* createFunction(const std::string& str)
     {
         // Parse the generator function.
         function::Function* generator = createFunction(paramVector[1]);
-
         return new function::PeriodicFunction(generator, std::stod(paramVector[2]), std::stod(paramVector[3]));
     } else
     if(paramVector[0] == "piece")
@@ -237,7 +235,7 @@ histogram::Recorder* createRecorder(const std::string& str)
  * single quotes, with sub parameters being space delimited within said quotes.
  *
  * The following is a complete list of the simulation parameters:
- * The first parameter is always the potential. (NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE FUNCTIONS! TODO?)
+ * The first argument is always the potential. (NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE FUNCTIONS! TODO?)
  * outputFile    (of): The file name to save results to. NOTE, this should NOT include an extension, as separate extensions
  *                         are used for different data types, all of which are generated automatically and internally.
  * posRecorder   (pr): Stringified representation of the recorder to use for tracking particle positions over time.
@@ -264,7 +262,7 @@ int main(int argc, char* argv[])
             args[i] = std::string(argv[i]);
         }
 
-        // Generate the force from a potetential function. This is always the first argument.
+        // Generate the force from a potential function. This is always the first argument.
         function::Function* force = createFunction(args[1]);
         force = force->derivative()->negate();
 

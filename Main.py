@@ -256,6 +256,8 @@ class PersistentDensityPredictor:
 # Create a shortname alias for PersistentDensityPredictor.
 p_pred = PersistentDensityPredictor;
 
+
+
 # Dictionary of all the predictors. This is used for parsing stringified versions of predictors.
 predictorsDict = {"thermaldensitypredictor":ThermalDensityPredictor, "t_pred":ThermalDensityPredictor, "thermal":ThermalDensityPredictor,
                   "singlewellpersistentdensitypredictor":SingleWellPersistentDensityPredictor, "swp_pred":SingleWellPersistentDensityPredictor, "singlewellpersistent":SingleWellPersistentDensityPredictor,
@@ -325,6 +327,7 @@ class HistogramGroup:
         if(normalize):
             # Compute the normalization constant by integrating the data with the trapazoidal algorithm.
             normalization = np.trapz(Y, dx=(self.bins[1] - self.bins[0]));
+            # Normalize the histogram values.
             Y /= normalization;
         return Y;
 # Create a shortname alias for HistogramGroup.
@@ -387,7 +390,7 @@ class BarGraphAnimator:
     def viewFromFile(filePath, smoothing=0, repeat=False, step=0):
         histograms = HistogramGroup(filePath);
         animator = BarGraphAnimator(histograms, smoothing);
-        ani = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histograms.data), (step + 1)), repeat=repeat);
+        animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histograms.data), (step + 1)), repeat=repeat);
         plt.show();
         plt.close();
 # Create a shortname alias for BarGraphAnimator.
@@ -454,7 +457,7 @@ class CustomHistogram:
 c_hist = CustomHistogram;
 
 # Dictionary of all the histograms. This is used for parsing stringified versions of histograms.
-animatorsDict = {"linearhistogram":LinearHistogram, "l_hist":LinearHistogram, "linear":LinearHistogram,
+histogramsDict = {"linearhistogram":LinearHistogram, "l_hist":LinearHistogram, "linear":LinearHistogram,
                  "customhistogram":CustomHistogram, "c_hist":CustomHistogram, "custom":CustomHistogram};
 
 #==================================================================================================================
@@ -1043,7 +1046,7 @@ def create1Way2ndOrderSpline(a, A, S, U, direction=False, check=-1):
     # Return the spline and it's ordered instabilities.
     return (spline, instabilities);
 
-#Deriving and integrating these wrapper functions, don't return the same type. type(DoubleWellFunc.derive) != DoubleWellFunc
+# Deriving and integrating these wrapper functions, don't return the same type. type(DoubleWellFunc.derive) != DoubleWellFunc
 '''
 Class encapsulating a double well potential. At initialization the relevant properties of the well
 are specified, and afterwards it's callable as any normal function.
