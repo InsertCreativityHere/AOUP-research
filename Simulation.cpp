@@ -235,7 +235,7 @@ histogram::Recorder* createRecorder(const std::string& str)
  * single quotes, with sub parameters being space delimited within said quotes.
  *
  * The following is a complete list of the simulation parameters:
- * The first argument is always the potential. (NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE FUNCTIONS! TODO?)
+ * The first argument is always the potential. (NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE OR PERIODIC FUNCTIONS! TODO?)
  * outputFile    (of): The file name to save results to. NOTE, this should NOT include an extension, as separate extensions
  *                         are used for different data types, all of which are generated automatically and internally.
  * posRecorder   (pr): Stringified representation of the recorder to use for tracking particle positions over time.

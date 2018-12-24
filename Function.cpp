@@ -104,7 +104,7 @@ namespace function
 
     double PeriodicFunction::integrateD(double a, double b) const
     {
-        if(b > a)
+        if(b < a)
         {
             return -integrateD(b, a);
         } else
