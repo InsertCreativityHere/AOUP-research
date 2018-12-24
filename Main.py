@@ -480,22 +480,37 @@ def decodeHistogram(params, name):
     # Convert the histogram identifier to lowercase for parsing.
     params[0] = params[0].lower();
     if(params[0] == "linear"):
-        if(len(params) > 5):
-            raise ValueError("Too many arguments passed for linear histogram. Expected 3, received " + (len(params) - 1));
+        if(len(params) != 4):
+            raise ValueError("Wrong number of arguments passed for linear histogram. Expected 3, received " + str(len(params) - 1));
         return LinearHistogram(*tuple(map(float, params[1:4])));
     elif(params[0] == "custom"):
         if(len(params) < 4):
             print("Warning " + name + ": Having less than 2 bins in a custom histogram can cause recording instability.");
         return CustomHistogram(tuple(map(float, params[1:])));
+    else:
+        raise ValueError("Unknown histogram type: " + params[0]);
 
 '''TODO COMMENTS'''
-def decodePotential(params):
+def decodeFunction(params):
     params = params.split();
     if(len(params) == 0):
-        raise ValueError("Missing potential type. Usage:\n   potential <type> <parameters...>");
-    # Convert the potential identifier to lowercase for parsing.
+        raise ValueError("Missing function type. Usage:\n   potential <type> <parameters...>");
+    # Convert the function identifier to lowercase for parsing.
     params[0] = params[0].lower();
-    return PolyFunc([0, 0.02, -0.025, 0, 0.001]);#TODO TODO TODO TODO
+    if(params[0] == "poly"):
+        return PolyFunc(list(map(float, params[1:])));
+    elif(params[0] == "periodic"):
+        if(len(params) != 4):
+            raise ValueError("Wrong number of arguments passed for periodic function. Expected 3, received " + str(len(params) - 1));
+        generator = decodeFunction(params[1]);
+        return PeriodicFunction(generator, *tuple(map(float, params[2:4])))
+    elif(params[0] == "piece"):
+        functions = [createFunction(p) for p in params[0::3]];
+        boundaries = list(map(float, params[1::3]));
+        directions = list(map(bool, params[2::3]));
+        return PieceFunc(functions, boundaries, directions);
+    else:
+        raise ValueError("Unknown function type: " + params[0]);
 
 '''TODO COMMENTS'''
 def decodePrediction(params, potential):
@@ -505,21 +520,23 @@ def decodePrediction(params, potential):
     # Convert the potential identifier to lowercase for parsing.
     params[0] = params[0].lower();
     if(params[0] == "thermal"):
-        if(len(params) > 4):
-            raise ValueError("Too many arguments passed for thermal predictor. Expected 3, received " + (len(params) - 1));
+        if(len(params) != 4):
+            raise ValueError("Wrong number of arguments passed for thermal predictor. Expected 3, received " + str(len(params) - 1));
         return ThermalDensityPredictor(potential, *tuple(map(float, params[1:4])));
     elif(params[0] == "singlewellpersistent"):
-        if(len(params) > 1):
-            raise ValueError("Too many arguments passed for single well persistent predictor. Expected 0, received " + (len(params) - 1));
+        if(len(params) != 1):
+            raise ValueError("Wrong number of arguments passed for single well persistent predictor. Expected 0, received " + str(len(params) - 1));
         return SingleWellPersistentDensityPredictor(potential);
     elif(params[0] == "doublewellpersistent"):
-        if(len(params) > 4):
-            raise ValueError("Too many arguments passed for double well persistent predictor. Expected 3, received " + (len(params) - 1));
+        if(len(params) != 4):
+            raise ValueError("Wrong number of arguments passed for double well persistent predictor. Expected 3, received " + str(len(params) - 1));
         return DoubleWellPersistentDensityPredictor(potential, *tuple(map(float, params[1:4])));
     elif(params[0] == "persistent"):
-        if(len(params) > 4):
-            raise ValueError("Too many arguments passed for persistent predictor. Expected 3, received " + (len(params) - 1));
+        if(len(params) != 4):
+            raise ValueError("Wrong number of arguments passed for persistent predictor. Expected 3, received " + str(len(params) - 1));
         return PersistentDensityPredictor(potential, *tuple(map(float, params[1:4])));
+    else:
+        raise ValueError("Unknown prediction type: " + params[0]);
 
 '''TODO COMMENTS'''
 def runFromFile(file):
@@ -561,7 +578,7 @@ def runFromFile(file):
             # Convert the parameter identifier to lowercase for parsing.
             params[0] = params[0].lower();
             if(params[0] == "potential"):
-                potential = [decodePotential(p) for p in params[1:]];
+                potential = [decodeFunction(p) for p in params[1:]];
                 if(setFlags[0]):
                     print("Warning: potential was set multiple times.");
                 else:
