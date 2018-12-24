@@ -1,8 +1,8 @@
 
 from matplotlib import pyplot as plt;
-from matplotlib import patches as patches;
-from matplotlib import path as path;
-from matplotlib import animation as animation;
+from matplotlib import patches;
+from matplotlib import path;
+from matplotlib import animation;
 import copy as cp;
 import numpy as np;
 import scipy as sp;
@@ -337,7 +337,7 @@ hist_g = HistogramGroup;
 '''
 Utility class for handling and creating bar graph animations from histogram groups.
 '''
-class BarGraphAnimator:
+class BarValueAnimator:
     '''Creates a set of bar graphs for each histogram in the group passed into it, and allows for animating through them.
        @param histograms: The histogram group to animate.
        @param smoothing: The number of neighbors in each direction to average each histogram's data with to produce smoother data.
@@ -372,7 +372,7 @@ class BarGraphAnimator:
         self.ax.set_ylim(0, (np.sum(histograms.data[0]) / 2));
         self.fig.suptitle("Time = 0s");
 
-    '''Internal function for generating animation frames out of histograms.
+    '''Internal function for generating animation frames out of histogram values.
        @param index: The index of the histogram to generate the frame from.'''
     def animate(self, index):
         self.top = self.histograms.fetchBins(list(range(max(0, (index - self.smoothing)), min(len(self.histograms.data), (index + self.smoothing + 1)))))[1:-1];
@@ -390,15 +390,83 @@ class BarGraphAnimator:
     @param step: The number of histograms to skip between each frame. (defaults to 0)'''
     def viewFromFile(filePath, smoothing=0, repeat=False, step=0):
         histograms = HistogramGroup(filePath);
-        animator = BarGraphAnimator(histograms, smoothing);
+        animator = BarValueAnimator(histograms, smoothing);
         a = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, len(histograms.data), (step + 1)), repeat=repeat);
         plt.show();
         plt.close();
-# Create a shortname alias for BarGraphAnimator.
-bg_anim = BarGraphAnimator;
+# Create a shortname alias for BarValueAnimator.
+bv_anim = BarValueAnimator;
+
+'''
+Utility class for handling and creating bar graph animations from the fluxes of histogram groups.
+'''
+class BarFluxAnimator:
+    '''Creates a set of bar graphs for each histogram in the group passed into it, and allows for animating through them.
+       @param histograms: The histogram group to animate.
+       @param smoothing: The number of neighbors in each direction to average each histogram's data with to produce smoother plots.
+                      If 0, then no averaging occurs. (defaults to 0)'''
+    def __init__(self, histograms, smoothing=0):
+        self.left = histograms.bins[:-1];
+        self.right = histograms.bins[1:];
+        self.bottom = np.zeros(len(self.left));
+        self.top = histograms.data[0][1:-1];######
+        self.histograms = histograms;
+        self.smoothing = smoothing;
+
+        vertexCount = 5 * len(self.left);
+        self.vertices = np.zeros((vertexCount, 2));
+        codes = np.ones(vertexCount, int) * path.Path.LINETO;
+        codes[0::5] = path.Path.MOVETO;
+        codes[4::5] = path.Path.CLOSEPOLY;
+        self.vertices[0::5, 0] = self.left;
+        self.vertices[0::5, 1] = self.bottom;
+        self.vertices[1::5, 0] = self.left;
+        self.vertices[1::5, 1] = self.top;
+        self.vertices[2::5, 0] = self.right;
+        self.vertices[2::5, 1] = self.top;
+        self.vertices[3::5, 0] = self.right;
+        self.vertices[3::5, 1] = self.bottom;
+
+        self.fig, self.ax = plt.subplots();
+        posPath = path.Path(self.vertices, codes);
+        negPath = path.Path(self.vertices, codes);
+        self.posPatch = patches.PathPatch(posPath, facecolor='green', edgecolor='black');
+        self.negPatch = patches.PathPatch(negPath, facecolor='red', edgecolor='black');
+        self.ax.add_patch(self.posPatch);
+        #self.ax.add_patch(self.negPatch);TODO MAKE THIS COLOR NEGATIVE AND POSITIVE FLUXES DIFFERENTLY!
+        self.ax.set_xlim(self.left[0], self.right[-1]);
+        ylim = np.sum(histograms.data[0]) / 10;
+        self.ax.set_ylim(-ylim, ylim);
+        self.fig.suptitle("Time = 0s");
+
+    '''Internal function for generating animation frames out of histogram values.
+       @param index: The index of the histogram to generate the frame from.'''
+    def animate(self, index):
+        self.top = (self.histograms.fetchBins(min(len(self.histograms.data), index + 1 + self.smoothing)) - self.histograms.fetchBins(max(0, index - self.smoothing)))[1:-1] / ((2 * self.smoothing) + 1);
+        self.vertices[1::5, 1] = self.top;
+        self.vertices[2::5, 1] = self.top;
+        self.fig.suptitle("Time = " + str(self.histograms.times[index]) + "s");
+        return self.patch;
+
+    '''Convenience function for loading a flux animation from a histogram data file. After loading the data in, this creates
+    and displays an animation of bar graphs change over time, with each frame representing the flux between consecutive time steps.
+    @param filePath: The file to load the histogram data from.
+    @param repeat: Whether to loop the animation after it's finished playing. (defaults to False)
+    @param smoothing: The number of neighbors in each direction to average each histogram's flux with to produce smoother plots.
+                      If 0, then no averaging occurs. (defaults to 0)
+    @param step: The number of histograms to skip between each frame. (defaults to 0)'''
+    def viewFromFile(filePath, smoothing=0, repeat=False, step=0):
+        histograms = HistogramGroup(filePath);
+        animator = BarFluxAnimator(histograms, smoothing);
+        a = animation.FuncAnimation(animator.fig, animator.animate, np.arange(1, (len(histograms.data) - 1), (step + 1)), repeat=repeat);
+        plt.show();
+        plt.close();
+# Create a shortname alias for BarFluxAnimator.
+bf_anim = BarFluxAnimator;
 
 # Dictionary of all the animators. This is used for parsing stringified versions of animators.
-animatorsDict = {"bargraphanimator":BarGraphAnimator, "bg_anim":BarGraphAnimator, "bargraph":BarGraphAnimator};
+animatorsDict = {"barvalueanimator":BarValueAnimator, "bv_anim":BarValueAnimator, "barvalue":BarValueAnimator,
+                 "barfluxanimator":BarFluxAnimator, "bf_anim":BarFluxAnimator, "barflux":BarFluxAnimator};
 
 #==================================================================================================================
 #                                               ---HISTOGRAM TYPES---
