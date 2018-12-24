@@ -648,7 +648,7 @@ def runFromFile(file):
                 if(setFlags[11]):
                     print("Warning: startBoundLeft was set multiple times.");
                 else:
-                    setFlags[0] = True;
+                    setFlags[11] = True;
             elif(params[0] == "startboundright"):
                 startBoundRight = tuple(map(float, params[1:]));
                 if(setFlags[12]):
