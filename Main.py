@@ -542,7 +542,7 @@ def updateStatus(status, index=-1):
 
 '''TODO COMMENTS'''
 def decodeHistogram(params, name):
-    params = params.split();
+    params = shlex.split(params);
     if(len(params) == 0):
         raise ValueError("Missing histogram type for " + name + ". Usage:\n    " + name + " <type> <parameters...>");
     # Convert the histogram identifier to lowercase for parsing.
@@ -560,7 +560,7 @@ def decodeHistogram(params, name):
 
 '''TODO COMMENTS'''
 def decodeFunction(params):
-    params = params.split();
+    params = shlex.split(params);
     if(len(params) == 0):
         raise ValueError("Missing function type. Usage:\n   potential <type> <parameters...>");
     # Convert the function identifier to lowercase for parsing.
@@ -582,7 +582,7 @@ def decodeFunction(params):
 
 '''TODO COMMENTS'''
 def decodePrediction(params, potential):
-    params = params.split();
+    params = shlex.split(params);
     if(len(params) == 0):
         raise ValueError("Missing potential type. Usage:\n   potential <type> <parameters...>");
     # Convert the potential identifier to lowercase for parsing.
@@ -954,6 +954,10 @@ class PolyFunc:
         return PolyFunc(self.c[1:] * np.arange(len(self))[1:]);
 
     def integD(self, a, b):
+        a = np.atleast_1d(a);
+        b = np.atleast_1d(b);
+        if(a.shape != b.shape):
+            raise ValueError("Boundary arrays must have the same shape. Incompatible shapes: a=" + str(a.shape) + " b=" + str(b.str));
         powerRange = np.arange(len(self)) + 1;
         return np.sum((self.c * (np.power(a[:, None], powerRange) - np.power(b[:, None], powerRange)) / powerRange), axis=1);
 
@@ -989,18 +993,29 @@ class PeriodicFunction:
         return PeriodicFunction(self.generator.derive(), self.start, self.stop);
 
     def integD(self, a, b):
-        if(b < a):
-            return -self.integD(a, b);
-        elif(b == a):
-            return 0;
+        a = np.atleast_1d(a);
+        b = np.atleast_1d(b);
+        if(a.shape != b.shape):
+            raise ValueError("Boundary arrays must have the same shape. Incompatible shapes: a=" + str(a.shape) + " b=" + str(b.str));
 
-        periods = (b // period) - (a // period);
+        signs = np.ones(a.shape);
+        flipped = np.where((b-a) < 0);
+        signs[flipped] = -1;
+        # Swap the elements between a and b where the bound order is flipped.
+        temp = np.empty(a.shape);
+        temp[flipped] = a[flipped];
+        a[flipped] = b[flipped];
+        b[flipped] = temp[flipped];
+        del flipped, temp;
+
+        periods = (b // self.period) - (a // self.period);
         a = a % self.period;
         b = b % self.period;
+        periods[np.where(a != 0)] -= 1;
         if(periods == 0):
-            return self.generator.integD((a + self.start), (b + self.start));
+            return signs * self.generator.integD((a + self.start), (b + self.start));
         else:
-            return self.generator.integD((a + self.start), self.stop) + self.generator.integD(self.start, (b + self.start)) * (area * periods);
+            return signs * self.generator.integD((a + self.start), self.stop) + self.generator.integD(self.start, (b + self.start)) * (area * periods);
 
 '''
 Class encapsulating a piecewise function, it's intialized with functions, and the boundary points between them.
@@ -1059,6 +1074,12 @@ class PieceFunc:
         return PieceFunc(derivatives, cp.deepcopy(self.bounds), cp.deepcopy(self.directions));
 
     def integD(self, a, b):
+        # If an array was passed in for the bounds, vectorize this function over it
+        if(isinstance(a, np.ndarray)):
+            if(a.shape != b.shape):
+                raise ValueError("Boundary arrays must have the same shape. Incompatible shapes: a=" + str(a.shape) + " b=" + str(b.str));
+            return (np.vectorize(integD))(a, b);
+
         if(a > b):
             return -integD(b, a);
         elif(a == b):
@@ -1079,6 +1100,17 @@ class PieceFunc:
         else:
             total += self.functions[-1].integD(self.bounds[-1], b);
         return total;
+
+
+
+
+
+
+
+
+
+
+
 
 '''WRITE BETTER DIRECTIONS TODO
 each parameter is [x, f(x), f'(x), f''(x)],
