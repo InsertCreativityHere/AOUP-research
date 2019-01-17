@@ -1,0 +1,17 @@
+#ignored
+#(NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE OR PERIODIC FUNCTIONS! TODO?)
+Potential           "periodic 'poly 0 0.5' 0 1"
+outputFile          "testing/result1" "testing/result2" "testing/result3" "testing/result4" "testing/result5" "testing/result6"
+posRecorder         "linear -10 10 0.1"
+forceRecorder         "linear -6 6 0.1"
+noiseRecorder         "linear -6 6 0.1"
+particleCount       10000
+duration            10
+timestep            0.0001
+diffusion           1
+memory              0.01 0.1 1 5 10 100
+dataDelay           200
+startBoundLeft      -3
+startBoundRight      3
+predictions         "Thermal -10 10 0.001" "Persistent 10000 -10 10"
+maxThreadCount      0

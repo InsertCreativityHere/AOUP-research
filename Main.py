@@ -90,8 +90,10 @@ class DoubleWellPersistentDensityPredictor:
                          This must be a PiecewiseCustom2ndOrder at the moment. #TODO make this more general one day.
        @param xMin: The lower position bound used in calculating the normalization constant, larger is better. (defaults to -1000)
        @param xMax: The upper position bound used in calculating the normalization constant, larger is better. (defaults to 1000)
-       @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)'''
-    def __init__(self, potential, xMin=-1000, xMax=1000, dx=0.0001):
+       @param dx: The position difference to use in calculating the normaliztion constant, smaller is better. (defaults to 0.001)
+       @param epsilon: The acceptable margin of error between the computed locations of the inflection points and matching slopes.
+                       If the values at the computed locations differ more than epsilon from the expected values, an exception is raised.'''
+    def __init__(self, potential, xMin=-1000, xMax=1000, dx=0.0001, epsilon=0.005):
         self.dU = potential.derive();
         self.d2U = self.dU.derive();
         self.dx = dx;
@@ -101,24 +103,29 @@ class DoubleWellPersistentDensityPredictor:
         # Store a sample of x values for normalizing the prediction later.
         self.Xs = np.arange(xMin, xMax, self.dx);
 
-        #TODO MAKE THIS WORK FOR POLYNOMIALS TOO!
-        # Store the locations of the points of inflection.
-        self.B = self.dU.bounds[1];
-        self.C = self.dU.bounds[3];
-        # Ensure that the provided points are inflection points.
-        if(np.abs(self.d2U(self.B)) > 0.001):
-            raise ValueError("Point of inflection not present at specified location B=" + str(self.A));
-        if(np.abs(self.d2U(self.C)) > 0.001):
-            raise ValueError("Point of inflection not present at specified location C=" + str(self.B));
+        #TODO MAKE THIS WORK FOR OTHER POTENTIAL TYPES? OR MAKE A MORE GENERAL VERSION FOR ALL POTENTIALS.
+        #OF MAYBE A MORE GENERAL FUNCTION THE COMPUTES THE LIKELY DISTRIBUTION.
+        if(isinstance(potential, PolyFunc)):
+            print("Right now, only PiecewiseCustom2ndOrder works with this...");
+        elif(isinstance(potential, PiecewiseCustom2ndOrder)):
+            # Store the locations of the points of inflection.
+            self.B = self.dU.bounds[1];
+            self.C = self.dU.bounds[3];
+            # Find the points that match the slopes at the inflection points, by exploiting the fact that the end-functions are quadratics.
+            self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
+            self.D = (self.dU(self.B) - self.dU.functions[-1].c[0]) / self.dU.functions[-1].c[1];
 
-        # Find the points that match the slopes at the inflection points, by exploiting the fact that the end-functions are quadratics.
-        self.A = (self.dU(self.C) - self.dU.functions[0].c[0]) / self.dU.functions[0].c[1];
-        self.D = (self.dU(self.B) - self.dU.functions[-1].c[0]) / self.dU.functions[-1].c[1];
+        # Ensure that the computed points are inflection points.
+        if(np.abs(self.d2U(self.B)) > epsilon):
+            raise ValueError("Point of inflection not present at specified location B=" + str(self.A));
+        if(np.abs(self.d2U(self.C)) > epsilon):
+            raise ValueError("Point of inflection not present at specified location C=" + str(self.B));
         # Ensure that the slopes match those at the inflection points.
-        if(np.abs(self.dU(self.A) - self.dU(self.C)) > 0.001):
+        if(np.abs(self.dU(self.A) - self.dU(self.C)) > epsilon):
             raise ValueError("Failed to locate slope matching C. Expected location was A=" + str(self.A));
-        if(np.abs(self.dU(self.D) - self.dU(self.B)) > 0.001):
+        if(np.abs(self.dU(self.D) - self.dU(self.B)) > epsilon):
             raise ValueError("Failed to locate slope matching B. Expected location was D=" + str(self.D));
+
 
 
     '''Generates the prediction profile as a normalized density distribution.
@@ -571,7 +578,7 @@ def decodeFunction(params):
         if(len(params) != 4):
             raise ValueError("Wrong number of arguments passed for periodic function. Expected 3, received " + str(len(params) - 1));
         generator = decodeFunction(params[1]);
-        return PeriodicFunction(generator, *tuple(map(float, params[2:4])))
+        return PeriodicFunc(generator, *tuple(map(float, params[2:4])))
     elif(params[0] == "piece"):
         functions = [createFunction(p) for p in params[0::3]];
         boundaries = list(map(float, params[1::3]));
@@ -774,11 +781,14 @@ def runSimulationMulti(potential, outputFile=["result"], predictions=[None], pos
     names = ["potential", "outputFile", "predictions", "posRecorder", "forceRecorder", "noiseRecorder", "particleCount", "duration", "timestep", "diffusion", "memory", "dataDelay", "startBounds", "activeForces", "noise"];
     simCount = max(*[len(arg) for arg in args]);
     for i in range(len(args)):
-        length = len(args[i]);
-        if(length == 1):
-            args[i] = args[i] * simCount;
-        elif(length != simCount):
-            raise ValueError("Argument lists must all be the same size. " + names[i] + " was only " + str(length) + " long, when " + str(simCount) + " was expected.");
+        try:
+            length = len(args[i]);
+            if(length == 1):
+                args[i] = args[i] * simCount;
+            elif(length != simCount):
+                raise ValueError("Argument lists must all be the same size. " + names[i] + " was only " + str(length) + " long, when " + str(simCount) + " was expected.");
+        except TypeError:
+            args[i] = [args[i]] * simCount;
 
     if(simCount < 1):
         print("No simulations to run... Exiting.");
@@ -808,6 +818,7 @@ def runSimulationMulti(potential, outputFile=["result"], predictions=[None], pos
                     completed += 1;
                 else:
                     simLock.wait(10);
+rsm = runSimulationMulti;
 
 '''TODO COMMENTS'''#(NOTE THAT THIS CANNOT PARSE NESTED PIECEWISE OR PERIODIC FUNCTIONS! TODO?)
 def runSimulation(potential, outputFile="result", predictions=None, posRecorder=None, forceRecorder=None, noiseRecorder=None, particleCount=100, duration=20, timestep=0.05, diffusion=1, memory=1, dataDelay=10, startBounds=(-5,5), activeForces=(0,0.2), noise=(0,1), index=-1, finished=None, simLock=None):
@@ -884,6 +895,7 @@ def runSimulation(potential, outputFile="result", predictions=None, posRecorder=
     else:
         # If this is a stand-alone run, export the results.
         return exportResults(potential, outputFile, predictions, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise);
+rss = runSimulation;
 
 '''TODO COMMENTS'''
 def exportResults(potential, outputFile, predictors, posRecorder, forceRecorder, noiseRecorder, particleCount, duration, timestep, diffusion, memory, dataDelay, startBounds, activeForces, noise, index=-1):
@@ -915,7 +927,7 @@ def exportResults(potential, outputFile, predictors, posRecorder, forceRecorder,
         legend.append(patches.Patch(color="black", label="potential"));
 
         plt.legend(handles=legend, loc=1);
-        plt.savefig(str(outputFile) + "P.png", fmt=".png", dpi=200);
+        plt.savefig(str(outputFile) + ".png", fmt=".png", dpi=200);
         plt.close();
     if(forceRecorder):
         pass;#TODO
@@ -970,7 +982,7 @@ function is then generated by repeating the specified region of the generator fu
 of the region on the generator is always mapped to 0 on the periodic function, but otherwise lengths are preserved.
 The period of the periodic function is the length of the region specified.
 '''
-class PeriodicFunction:
+class PeriodicFunc:
     def __init__(self, function, start, stop):
         self.generator = function;
         self.start = start;
@@ -990,7 +1002,7 @@ class PeriodicFunction:
     # Note that even though the derivative is probably undefined at the boundaries, this will always return
     # the value generator'(offset) at both boundaries of periodicity instead. TODO
     def derive(self):
-        return PeriodicFunction(self.generator.derive(), self.start, self.stop);
+        return PeriodicFunc(self.generator.derive(), self.start, self.stop);
 
     def integD(self, a, b):
         a = np.atleast_1d(a);
